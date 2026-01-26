@@ -1,5 +1,6 @@
 using HtmlAgilityPack;
 using FanficDownloader.Bot.Models;
+using System.Text.RegularExpressions;
 
 namespace FanficDownloader.Bot.Ficbook;
 
@@ -18,7 +19,8 @@ public class FicbookParser
             Pairings = ParsePairings(doc),
             Tags = ParseTags(doc),
             Description = ParseDescription(doc),
-            Chapters = ParseChapters(doc)
+            Chapters = ParseChapters(doc),
+            CoverUrl = ParseCover(doc)
         };
     }
 
@@ -39,14 +41,42 @@ public class FicbookParser
             ?? new List<string>();
     }
 
+//the shit is kinda bigg
     private List<string> ParseFandoms(HtmlDocument doc)
     {
-        return doc.DocumentNode
-            .SelectNodes("//div[contains(@class,'description')]//div[@class='mb-10'][.//strong[text()='Фэндом:']]//a")?
-            .Select(x => x.InnerText.Trim())
-            .ToList()
-            ?? new List<string>();
+        var scripts = doc.DocumentNode.SelectNodes("//script");
+        if (scripts == null)
+            return new List<string>();
+
+        foreach (var script in scripts)
+        {
+            var text = script.InnerText;
+
+            if (text.Contains("fanfic_fandoms"))
+            {
+                var match = Regex.Match(
+                    text,
+                    @"fanfic_fandoms:\s*\[(.*?)\]",
+                    RegexOptions.Singleline
+                );
+
+                if (match.Success)
+                {
+                    var inside = match.Groups[1].Value;
+
+                    return inside
+                        .Split(',')
+                        .Select(s => s.Trim().Trim('\'', '"'))
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .ToList();
+                }
+            }
+        }
+
+        return new List<string>();
     }
+
+
 
     private List<string> ParsePairings(HtmlDocument doc)
     {
@@ -72,6 +102,16 @@ public class FicbookParser
     {
         var node = doc.DocumentNode.SelectSingleNode("//div[@itemprop='description']");
         return node?.InnerText.Trim() ?? "Описание отсутствует";
+    }
+
+    private string? ParseCover(HtmlDocument doc)
+    {
+        var node = doc.DocumentNode
+            .SelectSingleNode("//fanfic-cover");
+
+        return node?.GetAttributeValue("src-original", null)
+            ?? node?.GetAttributeValue("src-desktop", null)
+            ?? node?.GetAttributeValue("src-mobile", null);
     }
 
 

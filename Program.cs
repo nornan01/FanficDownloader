@@ -112,9 +112,10 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         var parser = new FicbookParser();
 
         var html = await ficbookClient.LoadHtmlAsync(url, cancellationToken);
+        File.WriteAllText("debug.html", html);
         var fanfic = parser.Parse(html);
 
-        
+
 
 
         pendingFanfics[message.Chat.Id] = fanfic;

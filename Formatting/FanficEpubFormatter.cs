@@ -3,7 +3,6 @@ using System.IO.Compression;
 using System.Text;
 using System.Linq;
 
-
 namespace FanficDownloader.Bot.Formatting;
 
 public class FanficEpubFormatter
@@ -30,86 +29,166 @@ public class FanficEpubFormatter
         );
 
         // 2. container.xml
-        var containerXml = """
-        <?xml version="1.0"?>
-        <container version="1.0"
-          xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-          <rootfiles>
-            <rootfile full-path="OEBPS/content.opf"
-              media-type="application/xhtml+xml"/>
-          </rootfiles>
-        </container>
-        """;
-
         File.WriteAllText(
             Path.Combine(metaInf, "container.xml"),
-            containerXml,
+            """
+<?xml version="1.0"?>
+<container version="1.0"
+ xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+ <rootfiles>
+  <rootfile full-path="OEBPS/content.opf"
+   media-type="application/oebps-package+xml"/>
+ </rootfiles>
+</container>
+""",
             Encoding.UTF8
         );
 
-        // 3. content.html
-        foreach (var chapter in fanfic.Chapters)
+        // 3. cover
+        if (!string.IsNullOrEmpty(fanfic.CoverUrl))
         {
-            var html = BuildChapterHtml(chapter);
+            using var http = new HttpClient();
+            var bytes = http.GetByteArrayAsync(fanfic.CoverUrl).Result;
+            File.WriteAllBytes(Path.Combine(oebps, "cover.jpg"), bytes);
+
+            File.WriteAllText(Path.Combine(oebps, "cover.html"), """
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+ "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<img src="cover.jpg" alt="cover"/>
+</body>
+</html>
+""", Encoding.UTF8);
+        }
+
+        // 4. title page
+        File.WriteAllText(Path.Combine(oebps, "title.html"), $"""
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+ "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<h1>{fanfic.Title}</h1>
+<p><b>Авторы:</b> {string.Join(", ", fanfic.Authors)}</p>
+<p><b>Фэндомы:</b> {string.Join(", ", fanfic.Fandoms)}</p>
+<p><b>Пейринги:</b> {string.Join(", ", fanfic.Pairings)}</p>
+<p><b>Теги:</b> {string.Join(", ", fanfic.Tags)}</p>
+<p><b>Описание:</b> {fanfic.Description}</p>
+</body>
+</html>
+""", Encoding.UTF8);
+
+        // 5. chapters
+        foreach (var ch in fanfic.Chapters)
+        {
             File.WriteAllText(
-                Path.Combine(oebps, $"chapter{chapter.Number}.html"),
-                html,
+                Path.Combine(oebps, $"chapter{ch.Number}.html"),
+                BuildChapterHtml(ch),
                 Encoding.UTF8
             );
         }
 
-        // 4. content.opf
-        var manifest = new StringBuilder();
-        var spine = new StringBuilder();
+        // 6. toc.ncx
+        var toc = new StringBuilder();
+        toc.AppendLine(@"<?xml version=""1.0"" encoding=""utf-8""?>");
+        toc.AppendLine(@"<ncx xmlns=""http://www.daisy.org/z3986/2005/ncx/"" version=""2005-1"">");
+        toc.AppendLine(@"<navMap>");
 
-        foreach (var chapter in fanfic.Chapters.OrderBy(c => c.Number))
+        toc.AppendLine("""
+<navPoint id="titlepage" playOrder="1">
+ <navLabel><text>О книге</text></navLabel>
+ <content src="title.html"/>
+</navPoint>
+""");
+
+        int index = 2;
+        foreach (var ch in fanfic.Chapters.OrderBy(c => c.Number))
         {
-            var id = $"c{chapter.Number}";
-            var fileName = $"chapter{chapter.Number}.html";
-
-            manifest.AppendLine(
-                $"<item id=\"{id}\" href=\"{fileName}\" media-type=\"application/xhtml+xml\"/>"
-            );
-
-            spine.AppendLine(
-                $"<itemref idref=\"{id}\"/>"
-            );
+            toc.AppendLine($"""
+<navPoint id="c{ch.Number}" playOrder="{index}">
+ <navLabel><text>{ch.Title}</text></navLabel>
+ <content src="chapter{ch.Number}.html"/>
+</navPoint>
+""");
+            index++;
         }
 
-        var opf = $"""
-                    <?xml version="1.0" encoding="utf-8"?>
-                    <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
-                    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                        <dc:title>{fanfic.Title}</dc:title>
-                        <dc:creator>{string.Join(", ", fanfic.Authors)}</dc:creator>
-                        <dc:language>ru</dc:language>
-                        <dc:identifier id="bookid">fanfic-{Guid.NewGuid()}</dc:identifier>
-                    </metadata>
-
-                    <manifest>
-                        {manifest}
-                    </manifest>
-
-                    <spine>
-                        {spine}
-                    </spine>
-                    </package>
-                    """;
+        toc.AppendLine("</navMap></ncx>");
 
         File.WriteAllText(
-            Path.Combine(oebps, "content.opf"),
-            opf,
+            Path.Combine(oebps, "toc.ncx"),
+            toc.ToString(),
             Encoding.UTF8
         );
 
+        // 7. content.opf
+        var manifest = new StringBuilder();
+        var spine = new StringBuilder();
 
+        manifest.AppendLine("<item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>");
 
-        // 5. zip -> epub
+        if (!string.IsNullOrEmpty(fanfic.CoverUrl))
+        {
+            manifest.AppendLine("<item id=\"cover\" href=\"cover.jpg\" media-type=\"image/jpeg\"/>");
+            manifest.AppendLine("<item id=\"coverpage\" href=\"cover.html\" media-type=\"application/xhtml+xml\"/>");
+            spine.AppendLine("<itemref idref=\"coverpage\"/>");
+        }
+
+        manifest.AppendLine("<item id=\"titlepage\" href=\"title.html\" media-type=\"application/xhtml+xml\"/>");
+        spine.AppendLine("<itemref idref=\"titlepage\"/>");
+
+        foreach (var ch in fanfic.Chapters.OrderBy(c => c.Number))
+        {
+            manifest.AppendLine($"<item id=\"c{ch.Number}\" href=\"chapter{ch.Number}.html\" media-type=\"application/xhtml+xml\"/>");
+            spine.AppendLine($"<itemref idref=\"c{ch.Number}\"/>");
+        }
+
+        File.WriteAllText(
+            Path.Combine(oebps, "content.opf"),
+            $"""
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:title>{fanfic.Title}</dc:title>
+  <dc:creator>{string.Join(", ", fanfic.Authors)}</dc:creator>
+  <dc:language>ru</dc:language>
+  <dc:identifier id="bookid">fanfic-{Guid.NewGuid()}</dc:identifier>
+</metadata>
+<manifest>
+{manifest}
+</manifest>
+<spine toc="ncx">
+{spine}
+</spine>
+</package>
+""",
+            Encoding.UTF8
+        );
+
+        // 8. zip
         var epubPath = Path.Combine(Path.GetTempPath(), $"{safeTitle}.epub");
-        ZipFile.CreateFromDirectory(tempRoot, epubPath);
+
+        using (var fs = new FileStream(epubPath, FileMode.Create))
+        using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
+        {
+            var mimeEntry = zip.CreateEntry("mimetype", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(mimeEntry.Open(), Encoding.ASCII))
+                writer.Write("application/epub+zip");
+
+            foreach (var file in Directory.GetFiles(tempRoot, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(tempRoot, file)
+                    .Replace("\\", "/");
+
+                if (relative == "mimetype") continue;
+
+                zip.CreateEntryFromFile(file, relative, CompressionLevel.Optimal);
+            }
+        }
 
         Directory.Delete(tempRoot, true);
-
         return epubPath;
     }
 
@@ -119,20 +198,18 @@ public class FanficEpubFormatter
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")
-            .Replace("\n", "<br/>");
+            .Replace("\n", "<br />");
 
         return $"""
-                <html>
-                <head>
-                <meta charset="utf-8">
-                <title>{chapter.Title}</title>
-                </head>
-                <body>
-                <h2>{chapter.Title}</h2>
-                <p>{text}</p>
-                </body>
-                </html>
-                """;
-                    }
-
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+ "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<h2>{chapter.Title}</h2>
+<p>{text}</p>
+</body>
+</html>
+""";
+    }
 }

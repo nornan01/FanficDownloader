@@ -69,6 +69,7 @@ public class FanficService
             }
         }
     }
+    //мож вынесни тож в тхт форматтер??
 
     private async Task<string> BuildTxtFileAsync(Fanfic fanfic, CancellationToken ct)
     {

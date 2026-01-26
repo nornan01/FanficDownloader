@@ -11,4 +11,6 @@ public class Fanfic
 
     public List<Chapter> Chapters { get; set; } = [];
 
+    public string? CoverUrl { get; set; }
+
 }
