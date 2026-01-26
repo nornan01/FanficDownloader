@@ -4,7 +4,7 @@ using FanficDownloader.Bot.Models;
 namespace FanficDownloader.Bot.Formatting;
 
 
-public class FanficFormatter
+public class FanficTxtFormatter
 {
     public string ToTxt(Fanfic fanfic)
     {

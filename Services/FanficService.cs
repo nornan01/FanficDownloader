@@ -10,13 +10,15 @@ public class FanficService
 {
     private readonly FicbookClient _client;
     private readonly FicbookParser _parser;
-    private readonly FanficFormatter _formatter;
+    private readonly FanficTxtFormatter _formatterTxt;
+    private readonly FanficEpubFormatter _formatterEpub;
 
     public FanficService()
     {
         _client = new FicbookClient();
         _parser = new FicbookParser();
-        _formatter = new FanficFormatter();
+        _formatterTxt = new FanficTxtFormatter();
+        _formatterEpub = new FanficEpubFormatter();
     }
 
     public async Task SendFanficAsTxtAsync(
@@ -28,6 +30,21 @@ public class FanficService
         await LoadChaptersAsync(fanfic, ct);
 
         var filePath = await BuildTxtFileAsync(fanfic, ct);
+
+        await SendFileAsync(bot, chatId, filePath, ct);
+
+        File.Delete(filePath);
+    }
+
+    public async Task SendFanficAsEpubAsync(
+    ITelegramBotClient bot,
+    long chatId,
+    Fanfic fanfic,
+    CancellationToken ct)
+    {
+        await LoadChaptersAsync(fanfic, ct);
+
+        var filePath = _formatterEpub.BuildEpubFile(fanfic);
 
         await SendFileAsync(bot, chatId, filePath, ct);
 
@@ -55,7 +72,7 @@ public class FanficService
 
     private async Task<string> BuildTxtFileAsync(Fanfic fanfic, CancellationToken ct)
     {
-        var text = _formatter.ToTxt(fanfic);
+        var text = _formatterTxt.ToTxt(fanfic);
 
         var safeTitle = string.Concat(
             fanfic.Title.Where(c => !Path.GetInvalidFileNameChars().Contains(c))
@@ -68,6 +85,7 @@ public class FanficService
         return filePath;
     }
 
+   
     private async Task SendFileAsync(
         ITelegramBotClient bot,
         long chatId,
