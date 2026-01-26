@@ -1,376 +1,348 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+using System.IO.Compression;
 using System.Text;
-using EpubSharp;
+using System.Xml.Linq;
 using FanficDownloader.Bot.Models;
 
-namespace FanficDownloader.Bot.Formatters
+namespace FanficDownloader.Bot.Formatting;
+
+public class EpubGenerator
 {
-    public class EpubGenerator
+    /// <summary>
+    /// Converts a text string to an EPUB file.
+    /// </summary>
+    /// <param name="txtContent">The text content to convert</param>
+    /// <param name="title">The title of the book</param>
+    /// <param name="author">The author of the book</param>
+    /// <param name="outputPath">The path where the EPUB file will be saved</param>
+    public void CreateEpubFromTxt(string txtContent, string title, string author, string outputPath)
     {
-        public byte[] CreateEpub(Fanfic fanfic)
+        // Create a temporary directory for EPUB contents
+        string tempDir = Path.Combine(Path.GetTempPath(), $"epub_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+
+        try
         {
-            // Создаем книгу
-            var book = new EpubBook
-            {
-                Title = fanfic.Title,
-                Author = string.Join(", ", fanfic.Authors),
-                Description = fanfic.Description,
-                TableOfContents = new List<EpubChapter>()
-            };
+            // Create EPUB structure
+            CreateEpubStructure(tempDir);
 
-            // Добавляем метаданные
-            AddMetadata(book, fanfic);
+            // Generate content files
+            GenerateContentFiles(tempDir, txtContent, title, author);
 
-            // Добавляем обложку (если есть)
-            if (!string.IsNullOrEmpty(fanfic.CoverUrl))
-            {
-                AddCover(book, fanfic.CoverUrl);
-            }
+            // Generate metadata
+            GenerateMetadata(tempDir, title, author);
 
-            // Создаем титульную страницу
-            AddTitlePage(book, fanfic);
+            // Generate table of contents
+            GenerateToc(tempDir, title);
 
-            // Добавляем главы
-            AddChapters(book, fanfic);
+            // Package as ZIP
+            PackageAsEpub(tempDir, outputPath);
+        }
+        finally
+        {
+            // Clean up temporary directory
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
 
-            // Добавляем информацию о книге
-            AddInfoPage(book, fanfic);
+    /// <summary>
+    /// Converts Fanfic object to EPUB file.
+    /// </summary>
+    public void CreateEpubFromFanfic(Fanfic fanfic, string outputPath)
+    {
+        var formatter = new FanficFormatter();
+        string txtContent = formatter.ToTxt(fanfic);
+        string authors = string.Join(", ", fanfic.Authors);
+        
+        CreateEpubFromTxt(txtContent, fanfic.Title, authors, outputPath);
+    }
 
-            // Конвертируем в массив байтов
-            using var memoryStream = new MemoryStream();
-            EpubWriter.Write(memoryStream, book);
-            return memoryStream.ToArray();
+    private void CreateEpubStructure(string baseDir)
+    {
+        // Create directories
+        Directory.CreateDirectory(Path.Combine(baseDir, "META-INF"));
+        Directory.CreateDirectory(Path.Combine(baseDir, "OEBPS", "Text"));
+        Directory.CreateDirectory(Path.Combine(baseDir, "OEBPS", "Styles"));
+
+        // Create mimetype file (must be first and uncompressed)
+        File.WriteAllText(Path.Combine(baseDir, "mimetype"), "application/epub+zip", Encoding.ASCII);
+    }
+
+    private void GenerateContentFiles(string baseDir, string txtContent, string title, string author)
+    {
+        // Split content into chapters (by double newlines or other delimiters)
+        var chapters = SplitIntoChapters(txtContent);
+
+        // Generate cover page
+        string coverXhtml = GenerateCoverXhtml(title, author);
+        File.WriteAllText(Path.Combine(baseDir, "OEBPS", "Text", "cover.xhtml"), coverXhtml, Encoding.UTF8);
+
+        // Generate chapter files
+        for (int i = 0; i < chapters.Count; i++)
+        {
+            string chapterXhtml = GenerateChapterXhtml(chapters[i]);
+            string chapterFile = Path.Combine(baseDir, "OEBPS", "Text", $"chapter_{i + 1:D3}.xhtml");
+            File.WriteAllText(chapterFile, chapterXhtml, Encoding.UTF8);
         }
 
-        private void AddMetadata(EpubBook book, Fanfic fanfic)
+        // Generate CSS
+        string cssContent = GenerateCss();
+        File.WriteAllText(Path.Combine(baseDir, "OEBPS", "Styles", "style.css"), cssContent, Encoding.UTF8);
+    }
+
+    private List<string> SplitIntoChapters(string content)
+    {
+        // Split by chapter headers (lines starting with specific patterns or double newlines)
+        var chapters = new List<string>();
+        var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        
+        var currentChapter = new StringBuilder();
+        
+        foreach (var line in lines)
         {
-            // Добавляем дополнительные метаданные
-            book.Metadata.Subjects.AddRange(fanfic.Fandoms);
-            book.Metadata.Subjects.AddRange(fanfic.Tags);
-
-            if (fanfic.Pairings.Any())
+            // Check if this line is a chapter header (has dashes underneath pattern)
+            if (line.StartsWith("---") || line.All(c => c == '-'))
             {
-                book.Metadata.Subjects.Add($"Пейринг: {string.Join(", ", fanfic.Pairings)}");
-            }
-
-            if (!string.IsNullOrEmpty(fanfic.Rating))
-            {
-                book.Metadata.Subjects.Add($"Рейтинг: {fanfic.Rating}");
-            }
-
-            if (!string.IsNullOrEmpty(fanfic.Status))
-            {
-                book.Metadata.Subjects.Add($"Статус: {fanfic.Status}");
-            }
-
-            book.Metadata.Language = "ru";
-            book.Metadata.Date = DateTime.Now.ToString("yyyy-MM-dd");
-        }
-
-        private void AddCover(EpubBook book, string coverUrl)
-        {
-            try
-            {
-                using var httpClient = new HttpClient();
-                var imageData = httpClient.GetByteArrayAsync(coverUrl).GetAwaiter().GetResult();
-                var coverImage = new EpubByteFile
+                if (currentChapter.Length > 0)
                 {
-                    FileName = "cover.jpg",
-                    ContentType = "image/jpeg",
-                    Content = imageData
-                };
-
-                book.AddFile(coverImage);
-                book.CoverImage = coverImage;
+                    chapters.Add(currentChapter.ToString().Trim());
+                    currentChapter.Clear();
+                }
             }
-            catch
+            else
             {
-                // Если не удалось загрузить обложку, создаем простую текстовую
-                AddTextCover(book, fanfic);
+                currentChapter.AppendLine(line);
             }
         }
 
-        private void AddTextCover(EpubBook book, Fanfic fanfic)
+        if (currentChapter.Length > 0)
+            chapters.Add(currentChapter.ToString().Trim());
+
+        return chapters.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+    }
+
+    private string GenerateCoverXhtml(string title, string author)
+    {
+        return $@"<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns=""http://www.w3.org/1999/xhtml"" lang=""en"">
+<head>
+    <meta charset=""utf-8"" />
+    <title>Cover</title>
+    <link rel=""stylesheet"" type=""text/css"" href=""../Styles/style.css"" />
+</head>
+<body class=""cover"">
+    <h1>{HtmlEncode(title)}</h1>
+    <p class=""author"">{HtmlEncode(author)}</p>
+</body>
+</html>";
+    }
+
+    private string GenerateChapterXhtml(string chapterContent)
+    {
+        var lines = chapterContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var sb = new StringBuilder();
+
+        sb.AppendLine(@"<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns=""http://www.w3.org/1999/xhtml"" lang=""en"">
+<head>
+    <meta charset=""utf-8"" />
+    <link rel=""stylesheet"" type=""text/css"" href=""../Styles/style.css"" />
+</head>
+<body>");
+
+        foreach (var line in lines)
         {
-            var coverHtml = $@"
-                <html>
-                <head>
-                    <title>{fanfic.Title}</title>
-                    <style>
-                        body {{ 
-                            font-family: Arial, sans-serif; 
-                            text-align: center; 
-                            padding: 50px;
-                        }}
-                        h1 {{ font-size: 2em; margin-bottom: 20px; }}
-                        h2 {{ font-size: 1.5em; color: #666; }}
-                        .authors {{ font-size: 1.2em; margin: 20px 0; }}
-                    </style>
-                </head>
-                <body>
-                    <h1>{fanfic.Title}</h1>
-                    <div class='authors'>{string.Join(", ", fanfic.Authors)}</div>
-                    <h2>{string.Join(", ", fanfic.Fandoms)}</h2>
-                </body>
-                </html>";
-
-            var coverPage = new EpubTextFile
+            if (string.IsNullOrWhiteSpace(line))
             {
-                FileName = "cover.xhtml",
-                ContentType = "application/xhtml+xml",
-                TextContent = coverHtml
-            };
-
-            book.AddFile(coverPage);
-            book.CoverPage = coverPage;
-        }
-
-        private void AddTitlePage(EpubBook book, Fanfic fanfic)
-        {
-            var titleHtml = $@"
-                <html>
-                <head>
-                    <title>Титульная страница</title>
-                    <style>
-                        body {{ 
-                            font-family: Georgia, serif; 
-                            text-align: center; 
-                            padding: 100px 50px;
-                            line-height: 1.6;
-                        }}
-                        h1 {{ 
-                            font-size: 2.5em; 
-                            margin-bottom: 30px;
-                            color: #333;
-                        }}
-                        .authors {{
-                            font-size: 1.5em;
-                            margin: 20px 0;
-                            color: #666;
-                        }}
-                        .fandoms {{
-                            font-size: 1.2em;
-                            margin: 20px 0;
-                            font-style: italic;
-                        }}
-                        .description {{
-                            text-align: left;
-                            margin: 40px auto;
-                            max-width: 600px;
-                            font-size: 1.1em;
-                            line-height: 1.8;
-                        }}
-                        hr {{
-                            margin: 40px 100px;
-                            border: none;
-                            border-top: 1px solid #ccc;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <h1>{EscapeHtml(fanfic.Title)}</h1>
-                    <div class='authors'>{EscapeHtml(string.Join(", ", fanfic.Authors))}</div>
-                    <div class='fandoms'>{EscapeHtml(string.Join(", ", fanfic.Fandoms))}</div>
-                    <hr>
-                    <div class='description'>{FormatDescription(fanfic.Description)}</div>
-                </body>
-                </html>";
-
-            var titlePage = new EpubTextFile
+                sb.AppendLine("    <p class=\"empty\"></p>");
+            }
+            else
             {
-                FileName = "title.xhtml",
-                ContentType = "application/xhtml+xml",
-                TextContent = titleHtml
-            };
-
-            book.AddFile(titlePage);
-            book.TableOfContents.Add(new EpubChapter("Титульная страница", titlePage));
-        }
-
-        private void AddChapters(EpubBook book, Fanfic fanfic)
-        {
-            for (int i = 0; i < fanfic.Chapters.Count; i++)
-            {
-                var chapter = fanfic.Chapters[i];
-                var chapterNumber = i + 1;
-
-                var chapterHtml = $@"
-                    <html>
-                    <head>
-                        <title>Глава {chapterNumber}</title>
-                        <style>
-                            body {{
-                                font-family: Georgia, serif;
-                                padding: 50px;
-                                line-height: 1.8;
-                                font-size: 1.1em;
-                            }}
-                            h1 {{
-                                text-align: center;
-                                margin-bottom: 50px;
-                                font-size: 1.8em;
-                                color: #333;
-                            }}
-                            .chapter-title {{
-                                text-align: center;
-                                font-size: 1.4em;
-                                margin-bottom: 40px;
-                                color: #555;
-                            }}
-                            p {{
-                                text-indent: 1.5em;
-                                margin-bottom: 1em;
-                            }}
-                            .chapter-end {{
-                                text-align: center;
-                                margin-top: 50px;
-                                font-style: italic;
-                                color: #888;
-                            }}
-                        </style>
-                    </head>
-                    <body>
-                        <h1>Глава {chapterNumber}</h1>
-                        {(string.IsNullOrEmpty(chapter.Title) ? "" :
-                          $"<div class='chapter-title'>{EscapeHtml(chapter.Title)}</div>")}
-                        <div>{FormatChapterText(chapter.Text)}</div>
-                        <div class='chapter-end'>• • •</div>
-                    </body>
-                    </html>";
-
-                var chapterFile = new EpubTextFile
-                {
-                    FileName = $"chapter_{chapterNumber}.xhtml",
-                    ContentType = "application/xhtml+xml",
-                    TextContent = chapterHtml
-                };
-
-                book.AddFile(chapterFile);
-
-                var chapterTitle = string.IsNullOrEmpty(chapter.Title)
-                    ? $"Глава {chapterNumber}"
-                    : $"Глава {chapterNumber}. {chapter.Title}";
-
-                book.TableOfContents.Add(new EpubChapter(chapterTitle, chapterFile));
+                sb.AppendLine($"    <p>{HtmlEncode(line)}</p>");
             }
         }
 
-        private void AddInfoPage(EpubBook book, Fanfic fanfic)
-        {
-            var infoHtml = $@"
-                <html>
-                <head>
-                    <title>Информация о произведении</title>
-                    <style>
-                        body {{
-                            font-family: Arial, sans-serif;
-                            padding: 50px;
-                            line-height: 1.6;
-                        }}
-                        h1, h2 {{
-                            color: #333;
-                        }}
-                        .info-table {{
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin: 20px 0;
-                        }}
-                        .info-table td {{
-                            padding: 10px;
-                            border-bottom: 1px solid #eee;
-                            vertical-align: top;
-                        }}
-                        .label {{
-                            font-weight: bold;
-                            width: 150px;
-                            color: #555;
-                        }}
-                        .tags {{
-                            display: flex;
-                            flex-wrap: wrap;
-                            gap: 5px;
-                            margin: 5px 0;
-                        }}
-                        .tag {{
-                            background: #f0f0f0;
-                            padding: 2px 8px;
-                            border-radius: 10px;
-                            font-size: 0.9em;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <h1>Информация о произведении</h1>
-                    
-                    <table class='info-table'>
-                        <tr><td class='label'>Название:</td><td>{EscapeHtml(fanfic.Title)}</td></tr>
-                        <tr><td class='label'>Автор(ы):</td><td>{EscapeHtml(string.Join(", ", fanfic.Authors))}</td></tr>
-                        <tr><td class='label'>Фандом(ы):</td><td>{EscapeHtml(string.Join(", ", fanfic.Fandoms))}</td></tr>
-                        <tr><td class='label'>Пейринг(и):</td><td>{EscapeHtml(string.Join(", ", fanfic.Pairings))}</td></tr>
-                        <tr><td class='label'>Рейтинг:</td><td>{EscapeHtml(fanfic.Rating)}</td></tr>
-                        <tr><td class='label'>Статус:</td><td>{EscapeHtml(fanfic.Status)}</td></tr>
-                        <tr><td class='label'>Всего глав:</td><td>{fanfic.Chapters.Count}</td></tr>
-                    </table>
-                    
-                    <h2>Метки</h2>
-                    <div class='tags'>
-                        {string.Join("", fanfic.Tags.Select(t => $"<span class='tag'>{EscapeHtml(t)}</span>"))}
-                    </div>
-                    
-                    <h2>Описание</h2>
-                    <div>{FormatDescription(fanfic.Description)}</div>
-                    
-                    <div style='margin-top: 50px; color: #888; font-size: 0.9em;'>
-                        <p>Сгенерировано: {DateTime.Now:dd.MM.yyyy HH:mm}</p>
-                        <p>Источник: Ficbook.net</p>
-                    </div>
-                </body>
-                </html>";
+        sb.AppendLine(@"</body>
+</html>");
 
-            var infoFile = new EpubTextFile
+        return sb.ToString();
+    }
+
+    private string GenerateCss()
+    {
+        return @"
+body {
+    font-family: serif;
+    line-height: 1.5;
+    margin: 1em;
+}
+
+h1, h2, h3 {
+    font-weight: bold;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+p {
+    margin-bottom: 0.5em;
+    text-align: justify;
+}
+
+p.empty {
+    margin: 0.5em 0;
+}
+
+.cover {
+    text-align: center;
+}
+
+.cover h1 {
+    margin-top: 2em;
+    font-size: 2em;
+}
+
+.author {
+    margin-top: 1em;
+    font-style: italic;
+}
+";
+    }
+
+    private void GenerateMetadata(string baseDir, string title, string author)
+    {
+        string uuid = $"urn:uuid:{Guid.NewGuid()}";
+        string date = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+        var containerXml = new XDocument(
+            new XElement("container",
+                new XAttribute("version", "1.0"),
+                new XAttribute("xmlns", "urn:oasis:names:tc:opendocument:xmlns:container"),
+                new XElement("rootfiles",
+                    new XElement("rootfile",
+                        new XAttribute("full-path", "OEBPS/content.opf"),
+                        new XAttribute("media-type", "application/oebps-package+xml")
+                    )
+                )
+            )
+        );
+
+        var metaDir = Path.Combine(baseDir, "META-INF");
+        containerXml.Save(Path.Combine(metaDir, "container.xml"));
+
+        // Generate content.opf
+        var contentOpf = GenerateContentOpf(title, author, uuid, date);
+        contentOpf.Save(Path.Combine(baseDir, "OEBPS", "content.opf"));
+    }
+
+    private XDocument GenerateContentOpf(string title, string author, string uuid, string date)
+    {
+        return new XDocument(
+            new XElement("package",
+                new XAttribute("version", "3.0"),
+                new XAttribute("xmlns", "http://www.idpf.org/2007/opf"),
+                new XAttribute("unique-identifier", "BookID"),
+                new XElement("metadata",
+                    new XAttribute("xmlns:dc", "http://purl.org/dc/elements/1.1/"),
+                    new XAttribute("xmlns:opf", "http://www.idpf.org/2007/opf"),
+                    new XElement(XName.Get("identifier", "http://purl.org/dc/elements/1.1/"),
+                        new XAttribute("id", "BookID"),
+                        uuid
+                    ),
+                    new XElement(XName.Get("title", "http://purl.org/dc/elements/1.1/"), title),
+                    new XElement(XName.Get("creator", "http://purl.org/dc/elements/1.1/"), author),
+                    new XElement(XName.Get("language", "http://purl.org/dc/elements/1.1/"), "en"),
+                    new XElement(XName.Get("date", "http://purl.org/dc/elements/1.1/"), date)
+                ),
+                new XElement("manifest",
+                    new XElement("item", new XAttribute("id", "ncx"), new XAttribute("href", "toc.ncx"), new XAttribute("media-type", "application/x-dtbncx+xml")),
+                    new XElement("item", new XAttribute("id", "css"), new XAttribute("href", "Styles/style.css"), new XAttribute("media-type", "text/css")),
+                    new XElement("item", new XAttribute("id", "cover"), new XAttribute("href", "Text/cover.xhtml"), new XAttribute("media-type", "application/xhtml+xml")),
+                    new XElement("item", new XAttribute("id", "chapter_001"), new XAttribute("href", "Text/chapter_001.xhtml"), new XAttribute("media-type", "application/xhtml+xml"))
+                ),
+                new XElement("spine",
+                    new XAttribute("toc", "ncx"),
+                    new XElement("itemref", new XAttribute("idref", "cover")),
+                    new XElement("itemref", new XAttribute("idref", "chapter_001"))
+                )
+            )
+        );
+    }
+
+    private void GenerateToc(string baseDir, string title)
+    {
+        var tocNcx = new XDocument(
+            new XElement("ncx",
+                new XAttribute("version", "2005-1"),
+                new XAttribute("xmlns", "http://www.daisy.org/z3986/2005/ncx/"),
+                new XElement("head",
+                    new XElement("meta", new XAttribute("name", "dtb:uid"), new XAttribute("content", Guid.NewGuid().ToString())),
+                    new XElement("meta", new XAttribute("name", "dtb:depth"), new XAttribute("content", "1")),
+                    new XElement("meta", new XAttribute("name", "dtb:totalPageCount"), new XAttribute("content", "0")),
+                    new XElement("meta", new XAttribute("name", "dtb:maxPageNumber"), new XAttribute("content", "0"))
+                ),
+                new XElement("docTitle",
+                    new XElement("text", title)
+                ),
+                new XElement("navMap",
+                    new XElement("navPoint",
+                        new XAttribute("id", "navpoint-1"),
+                        new XAttribute("playOrder", "1"),
+                        new XElement("navLabel",
+                            new XElement("text", "Cover")
+                        ),
+                        new XElement("content", new XAttribute("src", "Text/cover.xhtml"))
+                    )
+                )
+            )
+        );
+
+        tocNcx.Save(Path.Combine(baseDir, "OEBPS", "toc.ncx"));
+    }
+
+    private void PackageAsEpub(string sourceDir, string outputPath)
+    {
+        // Delete existing file if it exists
+        if (File.Exists(outputPath))
+            File.Delete(outputPath);
+
+        using (var zipStream = File.Create(outputPath))
+        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create))
+        {
+            // Add mimetype first (uncompressed)
+            var mimetypeFile = Path.Combine(sourceDir, "mimetype");
+            if (File.Exists(mimetypeFile))
             {
-                FileName = "info.xhtml",
-                ContentType = "application/xhtml+xml",
-                TextContent = infoHtml
-            };
+                archive.CreateEntryFromFile(mimetypeFile, "mimetype", System.IO.Compression.CompressionLevel.NoCompression);
+            }
 
-            book.AddFile(infoFile);
-            book.TableOfContents.Add(new EpubChapter("Информация", infoFile));
+            // Add all other files
+            AddFilesToZip(archive, sourceDir, "");
         }
+    }
 
-        private string EscapeHtml(string text)
+    private void AddFilesToZip(ZipArchive archive, string directoryPath, string entryPrefix)
+    {
+        foreach (var file in Directory.GetFiles(directoryPath))
         {
-            if (string.IsNullOrEmpty(text))
-                return string.Empty;
+            if (Path.GetFileName(file) == "mimetype") continue;
 
-            return System.Net.WebUtility.HtmlEncode(text);
+            string entryName = entryPrefix + Path.GetFileName(file);
+            archive.CreateEntryFromFile(file, entryName);
         }
 
-        private string FormatDescription(string description)
+        foreach (var directory in Directory.GetDirectories(directoryPath))
         {
-            if (string.IsNullOrEmpty(description))
-                return string.Empty;
-
-            var formatted = EscapeHtml(description)
-                .Replace("\n", "<br>")
-                .Replace("\r", "");
-
-            return $"<p style='white-space: pre-line;'>{formatted}</p>";
+            string folderName = Path.GetFileName(directory);
+            string newPrefix = entryPrefix + folderName + "/";
+            AddFilesToZip(archive, directory, newPrefix);
         }
+    }
 
-        private string FormatChapterText(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-                return "<p>Текст главы отсутствует</p>";
-
-            var paragraphs = text.Split(new[] { "\n\n", "\r\n\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-            var formattedParagraphs = paragraphs.Select(p =>
-                $"<p>{EscapeHtml(p.Trim()).Replace("\n", "<br>")}</p>");
-
-            return string.Join("\n", formattedParagraphs);
-        }
+    private string HtmlEncode(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        return System.Net.WebUtility.HtmlEncode(text);
     }
 }
