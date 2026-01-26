@@ -1,6 +1,8 @@
 using FanficDownloader.Bot.Models;
 using System.IO.Compression;
 using System.Text;
+using System.Linq;
+
 
 namespace FanficDownloader.Bot.Formatting;
 
@@ -46,13 +48,34 @@ public class FanficEpubFormatter
         );
 
         // 3. content.html
-        var html = BuildHtml(fanfic);
-        File.WriteAllText(
-            Path.Combine(oebps, "content.html"),
-            html,
-            Encoding.UTF8
-        );
+        foreach (var chapter in fanfic.Chapters)
+        {
+            var html = BuildChapterHtml(chapter);
+            File.WriteAllText(
+                Path.Combine(oebps, $"chapter{chapter.Number}.html"),
+                html,
+                Encoding.UTF8
+            );
+        }
+
         // 4. content.opf
+        var manifest = new StringBuilder();
+        var spine = new StringBuilder();
+
+        foreach (var chapter in fanfic.Chapters.OrderBy(c => c.Number))
+        {
+            var id = $"c{chapter.Number}";
+            var fileName = $"chapter{chapter.Number}.html";
+
+            manifest.AppendLine(
+                $"<item id=\"{id}\" href=\"{fileName}\" media-type=\"application/xhtml+xml\"/>"
+            );
+
+            spine.AppendLine(
+                $"<itemref idref=\"{id}\"/>"
+            );
+        }
+
         var opf = $"""
                     <?xml version="1.0" encoding="utf-8"?>
                     <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
@@ -64,11 +87,11 @@ public class FanficEpubFormatter
                     </metadata>
 
                     <manifest>
-                        <item id="content" href="content.html" media-type="application/xhtml+xml"/>
+                        {manifest}
                     </manifest>
 
                     <spine>
-                        <itemref idref="content"/>
+                        {spine}
                     </spine>
                     </package>
                     """;
@@ -80,6 +103,7 @@ public class FanficEpubFormatter
         );
 
 
+
         // 5. zip -> epub
         var epubPath = Path.Combine(Path.GetTempPath(), $"{safeTitle}.epub");
         ZipFile.CreateFromDirectory(tempRoot, epubPath);
@@ -89,35 +113,26 @@ public class FanficEpubFormatter
         return epubPath;
     }
 
-    private string BuildHtml(Fanfic fanfic)
+    private string BuildChapterHtml(Chapter chapter)
     {
-        var sb = new StringBuilder();
+        var text = chapter.Text
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\n", "<br/>");
 
-        sb.AppendLine("<html>");
-        sb.AppendLine("<head>");
-        sb.AppendLine("<meta charset=\"utf-8\">");
-        sb.AppendLine($"<title>{fanfic.Title}</title>");
-        sb.AppendLine("</head>");
-        sb.AppendLine("<body>");
+        return $"""
+                <html>
+                <head>
+                <meta charset="utf-8">
+                <title>{chapter.Title}</title>
+                </head>
+                <body>
+                <h2>{chapter.Title}</h2>
+                <p>{text}</p>
+                </body>
+                </html>
+                """;
+                    }
 
-        sb.AppendLine($"<h1>{fanfic.Title}</h1>");
-
-        foreach (var chapter in fanfic.Chapters.OrderBy(c => c.Number))
-        {
-            sb.AppendLine($"<h2>{chapter.Title}</h2>");
-
-            var text = chapter.Text
-                .Replace("&", "&amp;")
-                .Replace("<", "&lt;")
-                .Replace(">", "&gt;")
-                .Replace("\n", "<br/>");
-
-            sb.AppendLine($"<p>{text}</p>");
-        }
-
-        sb.AppendLine("</body>");
-        sb.AppendLine("</html>");
-
-        return sb.ToString();
-    }
 }
