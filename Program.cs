@@ -8,7 +8,7 @@ using FanficDownloader.Bot.Formatting;
 using FanficDownloader.Bot.Models;
 
 
-var token = "XXX";
+var token = "hehehe";
 var bot = new TelegramBotClient(token);
 
 using var cts = new CancellationTokenSource();
