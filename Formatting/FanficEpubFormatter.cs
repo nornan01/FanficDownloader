@@ -17,6 +17,9 @@ public class FanficEpubFormatter
         var metaInf = Path.Combine(tempRoot, "META-INF");
         var oebps = Path.Combine(tempRoot, "OEBPS");
 
+       
+
+
         Directory.CreateDirectory(tempRoot);
         Directory.CreateDirectory(metaInf);
         Directory.CreateDirectory(oebps);
@@ -194,12 +197,6 @@ public class FanficEpubFormatter
 
     private string BuildChapterHtml(Chapter chapter)
     {
-        var text = chapter.Text
-            .Replace("&", "&amp;")
-            .Replace("<", "&lt;")
-            .Replace(">", "&gt;")
-            .Replace("\n", "<br />");
-
         return $"""
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
@@ -207,9 +204,10 @@ public class FanficEpubFormatter
 <html xmlns="http://www.w3.org/1999/xhtml">
 <body>
 <h2>{chapter.Title}</h2>
-<p>{text}</p>
+{chapter.Text}
 </body>
 </html>
 """;
     }
+
 }

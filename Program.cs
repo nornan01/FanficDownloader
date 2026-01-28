@@ -1,61 +1,50 @@
-﻿using Telegram.Bot;
+﻿using System.Text;
+using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using FanficDownloader.Bot.Ficbook;
 using FanficDownloader.Bot.Services;
 using FanficDownloader.Bot.Formatting;
 using FanficDownloader.Bot.Models;
 using Telegram.Bot.Types.ReplyMarkups;
-
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 
 var token = "XXX";
 var bot = new TelegramBotClient(token);
 var pendingFanfics = new Dictionary<long, Fanfic>();
-
 using var cts = new CancellationTokenSource();
-
+var sourceManager = new SourceManager();
 var receiverOptions = new ReceiverOptions
 {
     AllowedUpdates = Array.Empty<UpdateType>()
 };
-
 bot.StartReceiving(
     updateHandler: HandleUpdateAsync,
     errorHandler: HandleErrorAsync,
     receiverOptions: receiverOptions,
     cancellationToken: cts.Token
 );
-
 Console.WriteLine("Bot started...");
 Console.ReadLine();
 cts.Cancel();
 
 async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
 {
-    
-
+    // ================= CALLBACK BUTTONS =================
     if (update.CallbackQuery is { } callback)
     {
         await botClient.AnswerCallbackQuery(callback.Id);
-        
 
-        var chatId = callback.Message.Chat.Id;
+        var chatId = callback.Message!.Chat.Id;
 
         await botClient.EditMessageReplyMarkup(
             chatId: chatId,
-            messageId: callback.Message.MessageId,
+            messageId: callback.Message!.MessageId,
             replyMarkup: null,
             cancellationToken: cancellationToken
         );
 
-
-        await botClient.SendMessage(
-            chatId,
-            "⏳ Готовлю файл, это может занять пару минут... Но не волнуйся, тебе придет уведомление, когда всё будет готово 😊",
-            cancellationToken: cancellationToken
-        );
         var data = callback.Data;
 
         if (!pendingFanfics.TryGetValue(chatId, out var fanfic))
@@ -65,7 +54,6 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 "Фанфик не найден 😢",
                 cancellationToken: cancellationToken
             );
-
             return;
         }
 
@@ -81,19 +69,29 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         return;
     }
 
-    if (update.Message is not { } message) return;
-    if (message.Text is null) return;
+    // ================= NORMAL MESSAGE =================
+    if (update.Message is not { } message)
+        return;
 
-    if (!message.Text.Contains("ficbook.net"))
+    if (message.Text is null)
+        return;
+
+    // ================= /start =================
+    if (message.Text == "/start")
     {
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: "Жду ссылочку на фанфик 📚",
+            text:
+                "👋 Привет!\n\n" +
+                "Я бот для скачивания фанфиков 📚\n" +
+                "Просто пришли мне ссылку с Ficbook или Snapetales, и я подготовлю файл для тебя.\n\n" +
+                "Поддерживаемые форматы: TXT и EPUB.",
             cancellationToken: cancellationToken
         );
         return;
     }
 
+    // ================= URL =================
     var url = message.Text.Split(' ', '\n').FirstOrDefault(x => x.StartsWith("http"));
 
     if (url is null)
@@ -106,27 +104,48 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         return;
     }
 
+    IFanficSource source;
     try
     {
-        var ficbookClient = new FicbookClient();
-        var parser = new FicbookParser();
+        source = sourceManager.GetSource(url);
+    }
+    catch
+    {
+        await botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: "Этот сайт пока не поддерживается 😢",
+            cancellationToken: cancellationToken
+        );
+        return;
+    }
 
-        var html = await ficbookClient.LoadHtmlAsync(url, cancellationToken);
-        File.WriteAllText("debug.html", html);
-        var fanfic = parser.Parse(html);
+    // ================= DOWNLOAD =================
+    try
+    {
+        var preparingMessage = await botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: "⏳ Готовлю файл, это может занять пару минут...",
+            cancellationToken: cancellationToken
+        );
 
+        var fanfic = await source.GetFanficAsync(url, cancellationToken);
 
-
+        await botClient.EditMessageText(
+            chatId: message.Chat.Id,
+            messageId: preparingMessage.MessageId,
+            text: "✅ Готово! Выбирай формат ниже 👇",
+            cancellationToken: cancellationToken
+        );
 
         pendingFanfics[message.Chat.Id] = fanfic;
 
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[]
-                {
-                    InlineKeyboardButton.WithCallbackData("📄 TXT", "format:txt"),
-                    InlineKeyboardButton.WithCallbackData("📚 EPUB", "format:epub")
-                }
+            {
+                InlineKeyboardButton.WithCallbackData("📄 TXT", "format:txt"),
+                InlineKeyboardButton.WithCallbackData("📚 EPUB", "format:epub")
+            }
         });
 
         await botClient.SendMessage(
@@ -136,9 +155,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             cancellationToken: cancellationToken
         );
 
-
         var tgFormatter = new FanficTelegramFormatter();
         var infoText = tgFormatter.FormatInfoMessage(fanfic);
+
         await botClient.SendMessage(
             chatId: message.Chat.Id,
             text: infoText,
@@ -154,6 +173,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         );
     }
 }
+
 
 Task HandleErrorAsync(ITelegramBotClient botClient,Exception exception, CancellationToken cancellationToken)
 {

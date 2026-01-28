@@ -41,7 +41,7 @@ public class FicbookParser
             ?? new List<string>();
     }
 
-//the shit is kinda bigg
+//the
     private List<string> ParseFandoms(HtmlDocument doc)
     {
         var scripts = doc.DocumentNode.SelectNodes("//script");
