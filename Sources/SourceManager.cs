@@ -5,7 +5,8 @@ public class SourceManager
     private readonly List<IFanficSource> _sources = new()
     {
         new FicbookSource(),
-        new SnapetalesSource()
+        new SnapetalesSource(),
+        new FanfictionNetSource()
     };
 
     public IFanficSource GetSource(string url)

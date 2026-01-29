@@ -1,23 +1,28 @@
 using FanficDownloader.Bot.Models;
-using FanficDownloader.Bot.Ficbook;
+using FanficDownloader.Bot.FanfictionNet;
+using FanficDownloader.Bot.Services;
+
 
 
 namespace FanficDownloader.Bot.Sources;
 
-public class FicbookSource : IFanficSource
+public class FanfictionNetSource : IFanficSource
 {
-    private readonly FicbookClient _client = new();
-    private readonly FicbookParser _parser = new();
+    private readonly FanfictionNetParser _parser = new();
+    private readonly FlareSolverrClient _flare = new();
+
+    
 
     public bool CanHandle(string url)
-        => url.Contains("ficbook.net");
-
+        => url.Contains("fanfiction.net");
+    
     public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
     {
-        var html = await _client.LoadHtmlAsync(url, ct);
-        var fanfic = _parser.Parse(html);
+
+        var html = await _flare.GetAsync(url, ct);
+        var fanfic = _parser.Parse(html, url);
         fanfic.SourceUrl = url;
-        return fanfic;
+        return fanfic; 
     }
     public async Task PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
     {
@@ -26,7 +31,7 @@ public class FicbookSource : IFanficSource
             if (!string.IsNullOrEmpty(chapter.Text))
                 continue;
 
-            var html = await _client.LoadHtmlAsync(chapter.Url, ct);
+            var html = await _flare.GetAsync(chapter.Url, ct);
             chapter.Text = _parser.ParseChapterText(html);
 
             await Task.Delay(Random.Shared.Next(1200, 2500), ct);

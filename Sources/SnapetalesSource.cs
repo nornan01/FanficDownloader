@@ -15,17 +15,21 @@ public class SnapetalesSource : IFanficSource
     {
         var html = await _http.GetStringAsync(url, ct);
         var fanfic = _parser.Parse(html);
-
-        foreach (var chapter in fanfic.Chapters)
-        {
-            var chapterHtml = await _http.GetStringAsync(chapter.Url, ct);
-            chapter.Text = _parser.ParseChapterText(chapterHtml);
-//бля дело в парсере ебаный рот сука 6 часов
-            File.WriteAllText("debugchaptertext.html", _parser.ParseChapterText(chapterHtml));
-            File.WriteAllText("debug.html", chapterHtml);
-            await Task.Delay(Random.Shared.Next(1200, 2500), ct);
-        }
-
+        fanfic.SourceUrl = url;
         return fanfic;
     }
+    public async Task PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
+    {
+        foreach (var chapter in fanfic.Chapters)
+        {
+            if (!string.IsNullOrEmpty(chapter.Text))
+                continue;
+
+            var html = await _http.GetStringAsync(chapter.Url, ct);
+            chapter.Text = _parser.ParseChapterText(html);
+
+            await Task.Delay(Random.Shared.Next(1200, 2500), ct);
+        }
+    }
+
 }

@@ -50,14 +50,22 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         if (!pendingFanfics.TryGetValue(chatId, out var fanfic))
         {
             await botClient.SendMessage(
-                chatId,
-                "Фанфик не найден 😢",
+                chatId: chatId,
+                text: "Фанфик не найден 😢",
                 cancellationToken: cancellationToken
             );
             return;
         }
 
         var service = new FanficService();
+
+        await botClient.SendMessage(
+            chatId: chatId,
+            text: "⏳ Готовлю файл, это может занять пару минут...",
+            cancellationToken: cancellationToken
+        );
+        var fanficSource = sourceManager.GetSource(fanfic.SourceUrl);
+        await fanficSource.PopulateChaptersAsync(fanfic, cancellationToken);
 
         if (data == "format:txt")
             await service.SendFanficAsTxtAsync(botClient, chatId, fanfic, cancellationToken);
@@ -124,7 +132,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     {
         var preparingMessage = await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: "⏳ Готовлю файл, это может занять пару минут...",
+            text: "⏳ Минуточку...",
             cancellationToken: cancellationToken
         );
 

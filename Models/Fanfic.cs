@@ -13,4 +13,7 @@ public class Fanfic
 
     public string? CoverUrl { get; set; }
 
+    public string SourceUrl { get; set; } = "";
+
+
 }

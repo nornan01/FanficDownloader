@@ -3,12 +3,17 @@ using FanficDownloader.Bot.Formatting;
 using FanficDownloader.Bot.Models;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using FanficDownloader.Bot.Snapetales;
+using System.Net.Http;
+
 
 namespace FanficDownloader.Bot.Services;
 
 public class FanficService
 {
-    
+
+    private readonly SourceManager _sourceManager = new();
+
     private readonly FanficTxtFormatter _formatterTxt;
     private readonly FanficEpubFormatter _formatterEpub;
 
@@ -82,4 +87,16 @@ public class FanficService
             cancellationToken: ct
         );
     }
+    public async Task<Fanfic> DownloadAsync(string url, CancellationToken ct)
+    {
+        var source = _sourceManager.GetSource(url);
+
+        var fanfic = await source.GetFanficAsync(url, ct);
+        await source.PopulateChaptersAsync(fanfic, ct);
+
+        return fanfic;
+    }
+
+
+
 }
