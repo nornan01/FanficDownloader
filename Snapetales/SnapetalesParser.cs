@@ -129,7 +129,6 @@ public class SnapetalesParser
     }
 
 
-
     public string ParseChapterText(string html)
     {
         var doc = new HtmlDocument();

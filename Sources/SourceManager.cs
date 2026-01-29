@@ -6,7 +6,8 @@ public class SourceManager
     {
         new FicbookSource(),
         new SnapetalesSource(),
-        new FanfictionNetSource()
+        new FanfictionNetSource(),
+        new WalkingThePlankSource()
     };
 
     public IFanficSource GetSource(string url)
