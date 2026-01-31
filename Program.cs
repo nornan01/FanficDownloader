@@ -53,7 +53,8 @@ bot.StartReceiving(
     cancellationToken: cts.Token
 );
 Console.WriteLine("Bot started...");
-Console.ReadLine();
+
+await Task.Delay(Timeout.Infinite);
 
 cts.Cancel();
 
