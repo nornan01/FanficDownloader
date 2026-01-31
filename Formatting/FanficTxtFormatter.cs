@@ -16,14 +16,14 @@ public class FanficTxtFormatter
 
         if (fanfic.Authors.Any())
         {
-            sb.AppendLine("Авторы:");
+            sb.AppendLine("Authors:");
             sb.AppendLine(string.Join(", ", fanfic.Authors));
             sb.AppendLine();
         }
 
         if (!string.IsNullOrWhiteSpace(fanfic.Description))
         {
-            sb.AppendLine("Описание:");
+            sb.AppendLine("Description:");
             sb.AppendLine(fanfic.Description);
             sb.AppendLine();
         }

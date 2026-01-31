@@ -7,12 +7,33 @@ using FanficDownloader.Bot.Services;
 using FanficDownloader.Bot.Formatting;
 using FanficDownloader.Bot.Models;
 using Telegram.Bot.Types.ReplyMarkups;
-Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+
+
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var token = "XXX";
 var bot = new TelegramBotClient(token);
 var pendingFanfics = new Dictionary<long, Fanfic>();
+var userLanguages = new Dictionary<long, Language>();
+string T(long chatId, string en, string ru)
+{
+    return GetUserLanguage(chatId) == Language.Russian ? ru : en;
+}
+
+Language GetUserLanguage(long chatId)
+{
+    if (userLanguages.TryGetValue(chatId, out var lang))
+        return lang;
+
+    return Language.English; // язык по умолчанию
+}
+
+void SetUserLanguage(long chatId, Language lang)
+{
+    userLanguages[chatId] = lang;
+}
+
 using var cts = new CancellationTokenSource();
 var sourceManager = new SourceManager();
 var receiverOptions = new ReceiverOptions
@@ -27,6 +48,7 @@ bot.StartReceiving(
 );
 Console.WriteLine("Bot started...");
 Console.ReadLine();
+
 cts.Cancel();
 
 async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -46,7 +68,26 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         );
 
         var data = callback.Data;
+        if (data!.StartsWith("lang:"))
+        {
+            var lang = data == "lang:ru"
+                ? Language.Russian
+                : Language.English;
 
+            SetUserLanguage(chatId, lang);
+
+            var text = lang == Language.Russian
+                ? "🇷🇺 Язык установлен! Отправь ссылку на фанфик."
+                : "🇬🇧 Language set! Send me a fanfic link.";
+
+            await botClient.SendMessage(
+                chatId: chatId,
+                text: text,
+                cancellationToken: cancellationToken
+            );
+
+            return;
+        }
         if (!pendingFanfics.TryGetValue(chatId, out var fanfic))
         {
             await botClient.SendMessage(
@@ -61,7 +102,10 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         await botClient.SendMessage(
             chatId: chatId,
-            text: "⏳ Готовлю файл, это может занять пару минут...",
+            text: T(chatId,
+                        "⏳ Preparing the file, it might take a few minutes...",
+                        "⏳ Готовлю файл, это может занять пару минут..."
+                    ),
             cancellationToken: cancellationToken
         );
         var fanficSource = sourceManager.GetSource(fanfic.SourceUrl);
@@ -84,20 +128,46 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     if (message.Text is null)
         return;
 
+    // ====== auto-detect language from Telegram ======
+    if (!userLanguages.ContainsKey(message.Chat.Id))
+    {
+        var tgLang = message.From?.LanguageCode;
+
+        if (tgLang == "ru" || tgLang == "uk" || tgLang == "be")
+            SetUserLanguage(message.Chat.Id, Language.Russian);
+        else
+            SetUserLanguage(message.Chat.Id, Language.English);
+    }
+
+
     // ================= /start =================
     if (message.Text == "/start")
     {
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+        new[]
+        {
+            InlineKeyboardButton.WithCallbackData("🇬🇧 English", "lang:en"),
+            InlineKeyboardButton.WithCallbackData("🇷🇺 Русский", "lang:ru")
+        }
+    });
+
+        var lang = GetUserLanguage(message.Chat.Id);
+
+        var text = lang == Language.Russian
+            ? "👋 Привет!\n\nЯ бот для скачивания фанфиков 📚\nВыбери язык:"
+            : "👋 Hello!\n\nI'm a bot for downloading fanfics 📚\nChoose your language:";
+
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text:
-                "👋 Привет!\n\n" +
-                "Я бот для скачивания фанфиков 📚\n" +
-                "Просто пришли мне ссылку с Ficbook или Snapetales, и я подготовлю файл для тебя.\n\n" +
-                "Поддерживаемые форматы: TXT и EPUB.",
+            text: text,
+            replyMarkup: keyboard,
             cancellationToken: cancellationToken
         );
+
         return;
     }
+
 
     // ================= URL =================
     var url = message.Text.Split(' ', '\n').FirstOrDefault(x => x.StartsWith("http"));
@@ -106,7 +176,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     {
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: "Я не нашёл ссылку 😢",
+            text: T(message.Chat.Id, "I didn't find a link 😢", "Я не нашёл ссылку 😢"),
             cancellationToken: cancellationToken
         );
         return;
@@ -117,13 +187,16 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     {
         source = sourceManager.GetSource(url);
     }
-    catch
+    catch (NotSupportedException)
     {
         await botClient.SendMessage(
-            chatId: message.Chat.Id,
-            text: "Этот сайт пока не поддерживается 😢",
-            cancellationToken: cancellationToken
-        );
+        chatId: message.Chat.Id,
+        text: T(message.Chat.Id,
+            "This website is not supported yet. If you'd like to see it supported, check the bot description.",
+            "Этот сайт пока не поддерживается. Если ты хочешь его добавить, посмотри описание бота."
+        ),
+        cancellationToken: cancellationToken
+    );
         return;
     }
 
@@ -132,7 +205,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     {
         var preparingMessage = await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: "⏳ Минуточку...",
+            text: T(message.Chat.Id,
+                        "⏳ Give me a moment...",
+                        "⏳ Подожди секунду..."),
             cancellationToken: cancellationToken
         );
 
@@ -141,7 +216,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         await botClient.EditMessageText(
             chatId: message.Chat.Id,
             messageId: preparingMessage.MessageId,
-            text: "✅ Готово! Выбирай формат ниже 👇",
+            text: T(message.Chat.Id,
+                                    "This website is not supported yet.",
+                                    "Этот сайт пока не поддерживается."),
             cancellationToken: cancellationToken
         );
 
@@ -158,7 +235,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: "Выбери формат:",
+            text: T(message.Chat.Id, "Choose a format:", "Выбери формат:"),
             replyMarkup: keyboard,
             cancellationToken: cancellationToken
         );
@@ -176,7 +253,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     {
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: $"❌ Не удалось скачать страницу ({ex.StatusCode})",
+            text: $"❌ Download failed: couldn't download the page ({ex.StatusCode})",
             cancellationToken: cancellationToken
         );
     }

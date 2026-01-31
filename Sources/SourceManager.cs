@@ -13,6 +13,6 @@ public class SourceManager
     public IFanficSource GetSource(string url)
     {
         return _sources.FirstOrDefault(s => s.CanHandle(url))
-            ?? throw new Exception("Источник не поддерживается");
+            ?? throw new NotSupportedException();
     }
 }

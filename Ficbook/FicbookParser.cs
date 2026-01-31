@@ -27,7 +27,7 @@ public class FicbookParser
     private string ParseTitle(HtmlDocument doc)
     {
         var node = doc.DocumentNode.SelectSingleNode("//h1");
-        return node?.InnerText.Trim() ?? "Не удалось найти название";
+        return node?.InnerText.Trim() ?? "No title found";
     }
 
     private List<string> ParseAuthors(HtmlDocument doc)
@@ -144,7 +144,7 @@ public class FicbookParser
             chapters.Add(new Chapter
             {
                 Number = number++,
-                Title = titleNode?.InnerText.Trim() ?? $"Глава {number - 1}",
+                Title = titleNode?.InnerText.Trim() ?? $"Chapter {number - 1}",
                 Url = fullUrl
             });
         }

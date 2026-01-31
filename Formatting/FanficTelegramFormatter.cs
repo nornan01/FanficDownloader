@@ -6,17 +6,16 @@ class FanficTelegramFormatter
     {
         return 
                         $"""
-                        📖 Название: {fanfic.Title}
+                        📖 Title: {fanfic.Title}
 
-                        ✍️ Автор: {string.Join(", ", fanfic.Authors)}
+                        ✍️ Authors: {string.Join(", ", fanfic.Authors)}
 
-                        📚 Фандом: {string.Join(", ", fanfic.Fandoms)}
-
-                        ❤️ Пейринг: {string.Join(", ", fanfic.Pairings)}
+                        📚 Fandom: {string.Join(", ", fanfic.Fandoms)}
+                        ❤️ Pairings: {string.Join(", ", fanfic.Pairings)}
                         
-                        🏷 Метки: {string.Join(", ", fanfic.Tags)}
+                        🏷 Tags: {string.Join(", ", fanfic.Tags)}
 
-                        📝 Описание:
+                        📝 Description:
                         {fanfic.Description}
                         """;
     }
