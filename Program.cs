@@ -12,7 +12,13 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-var token = "XXX";
+var token = Environment.GetEnvironmentVariable("TG_BOT_TOKEN");
+
+if (string.IsNullOrEmpty(token))
+{
+    throw new Exception("TG_BOT_TOKEN is not set");
+}
+
 var bot = new TelegramBotClient(token);
 var pendingFanfics = new Dictionary<long, Fanfic>();
 var userLanguages = new Dictionary<long, Language>();
