@@ -224,8 +224,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             chatId: message.Chat.Id,
             messageId: preparingMessage.MessageId,
             text: T(message.Chat.Id,
-                                    "This website is not supported yet.",
-                                    "Этот сайт пока не поддерживается."),
+                                    "✅ Done! Choose a format below 👇",
+                                    "✅ Готово! Выбери формат ниже 👇"),
             cancellationToken: cancellationToken
         );
 
