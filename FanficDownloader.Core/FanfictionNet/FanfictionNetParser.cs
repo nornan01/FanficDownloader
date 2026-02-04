@@ -1,8 +1,8 @@
-using FanficDownloader.Core.Models;
+using FanficDownloader.Bot.Models;
 using HtmlAgilityPack;
 using System.Text;
 
-namespace FanficDownloader.Core.FanfictionNet;
+namespace FanficDownloader.Bot.FanfictionNet;
 
 public class FanfictionNetParser
 {
@@ -13,14 +13,14 @@ public class FanfictionNetParser
 
         return new Fanfic
         {
-            Title = ParseTitle(doc),//
-            Authors = ParseAuthors(doc),//
-            Fandoms = ParseFandoms(doc),//
-            Pairings = ParsePairings(doc),//
-            Tags = ParseTags(doc),//
-            Description = ParseDescription(doc),//
-            Chapters = ParseChapters(doc, sourceUrl),//
-            CoverUrl = ParseCoverUrl(doc),//
+            Title = ParseTitle(doc),
+            Authors = ParseAuthors(doc),
+            Fandoms = ParseFandoms(doc),
+            Pairings = ParsePairings(doc),
+            Tags = ParseTags(doc),
+            Description = ParseDescription(doc),
+            Chapters = ParseChapters(doc, sourceUrl),
+            CoverUrl = ParseCoverUrl(doc),
             SourceUrl = sourceUrl
         };
     }
@@ -78,15 +78,11 @@ public class FanfictionNetParser
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
 
-        var story = doc.DocumentNode
-            .SelectSingleNode("//div[@id='storytext']");
+        var nodes = doc.DocumentNode
+            .SelectNodes("//div[@id='storytext']/p");
 
-        if (story == null)
-            throw new Exception("Fanfiction.net: storytext not found");
-
-        var nodes = story.SelectNodes(".//p");
         if (nodes == null || nodes.Count == 0)
-            throw new Exception("Fanfiction.net: storytext paragraphs not found");
+            throw new Exception("Fanfiction.net: storytext not found");
 
         var sb = new StringBuilder();
 
