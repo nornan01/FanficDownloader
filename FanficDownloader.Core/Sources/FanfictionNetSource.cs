@@ -11,18 +11,18 @@ public class FanfictionNetSource : IFanficSource
     private readonly FanfictionNetParser _parser = new();
     private readonly FlareSolverrClient _flare = new();
 
-    
+
 
     public bool CanHandle(string url)
         => url.Contains("fanfiction.net");
-    
+
     public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
     {
 
         var html = await _flare.GetAsync(url, ct);
         var fanfic = _parser.Parse(html, url);
         fanfic.SourceUrl = url;
-        return fanfic; 
+        return fanfic;
     }
     public async Task PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
     {
