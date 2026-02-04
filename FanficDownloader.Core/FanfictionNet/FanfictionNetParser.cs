@@ -78,11 +78,15 @@ public class FanfictionNetParser
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
 
-        var nodes = doc.DocumentNode
-            .SelectNodes("//div[@id='storytext']/p");
+        var story = doc.DocumentNode
+            .SelectSingleNode("//div[@id='storytext']");
 
-        if (nodes == null || nodes.Count == 0)
+        if (story == null)
             throw new Exception("Fanfiction.net: storytext not found");
+
+        var nodes = story.SelectNodes(".//p");
+        if (nodes == null || nodes.Count == 0)
+            throw new Exception("Fanfiction.net: storytext paragraphs not found");
 
         var sb = new StringBuilder();
 
