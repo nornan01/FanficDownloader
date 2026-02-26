@@ -1,0 +1,212 @@
+@page
+@model IndexModel
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet"   href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+</head>
+
+<body class="bg-light">
+
+    <div class="container d-flex flex-column align-items-center justify-content-center"    style="min-height:100vh;">
+
+        <div class="text-center mb-5">
+            <h1 class="fw-bold">Fanfic Downloader</h1>
+            <p class="text-muted">
+                Download fanfics in EPUB or TXT format
+            </p>
+        </div>
+
+        <!-- INPUT CARD -->
+        <div class="card shadow-lg p-4" style="max-width:520px; width:100%; border-radius:16px;">
+
+            <input id="urlInput"        class="form-control form-control-lg"       type="text"      placeholder="Paste fanfic URL">
+
+            <div class="d-flex justify-content-center gap-3 mt-3">
+
+                <button id="btnEpub"   class="btn btn-primary btn-lg flex-fill"       onclick="triggerDownload('epub')"
+                        disabled>
+                    Download EPUB
+                </button>
+
+                <button id="btnTxt"            class="btn btn-outline-primary btn-lg flex-fill"                    onclick="triggerDownload('txt')"
+                        disabled>
+                    Download TXT
+                </button>
+
+            </div>
+
+            <div class="text-center mt-3" id="downloadLoading" style="display:none;">
+                <div class="d-flex justify-content-center align-items-center gap-2">
+                    <div class="spinner-border text-primary"></div>
+                    <span class="text-muted">Preparing your file...</span>
+                </div>
+            </div>
+            <div id="queueText" class="text-center text-muted mt-2"></div>
+        </div>
+
+        <!-- PREVIEW CARD -->
+        <div id="fanficCard" class="card mt-4 shadow"
+             style="max-width:520px; width:100%; border-radius:16px; display:none; opacity:0; transition:opacity .3s;">
+
+            <div class="card-body">
+                <div id="estimated" class="text-muted text-center mt-2"></div>
+                <br>
+                <h5 id="ficTitle"></h5>
+                <p id="ficAuthor" class="text-muted"></p>
+                <p><strong>Fandom:</strong> <span id="ficFandoms"></span></p>
+                <p><strong>Pairings:</strong> <span id="ficPairings"></span></p>
+                <p><strong>Tags:</strong> <span id="ficTags"></span></p>
+                <p id="ficDescription"></p>
+
+            </div>
+        </div>
+
+        <div class="text-center mt-5 text-muted" style="font-size:14px;">
+            Let's preserve our favourite stories in a timeless format <br>
+
+            Made with ❤️ by
+            <br>
+            <a href="https://t.me/nornan" target="_blank"     class="text-decoration-none text-muted ms-1 me-2">
+                <i class="bi bi-telegram"></i> Telegram
+            </a>
+            
+            <a href="https://github.com/nornan01" target="_blank"   class="text-decoration-none text-muted ms-2">
+                <i class="bi bi-github"></i> GitHub
+            </a>
+
+            <div class="mt-2">
+                For fast downloading in Telegram:
+                <a href="https://t.me/fanfic_downloader_bot" target="_blank"      class="text-decoration-none">
+                    @@fanfic_downloader_bot
+                </a>
+            </div>
+            <div class="mt-2">
+                <a class="text-decoration-none"  href="https://t.me/nornan?text=FanficDownloader%20issue"
+                       target="_blank">
+                    Report a problem
+                </a>
+            </div>
+
+        </div>
+
+
+    </div>
+
+    <script>
+
+            var urlInput = document.getElementById("urlInput");
+            urlInput.addEventListener("input", loadPreview);
+
+            
+            async function loadPreview() {
+
+                var url = urlInput.value;
+                if (!url) return;
+
+                var response = await fetch("/download/info", {
+                    method: "POST",
+                    body: new URLSearchParams({ Url: url })
+                });
+
+                if (!response.ok) return;
+
+                var fic = await response.json();
+
+                var card = document.getElementById("fanficCard");
+                card.style.display = "block";
+                setTimeout(() => card.style.opacity = "1", 10);
+
+                document.getElementById("ficTitle").innerText = fic.title;
+                document.getElementById("ficAuthor").innerText =
+                    fic.authors?.join(", ") ?? "Unknown author";
+                document.getElementById("ficFandoms").innerText =
+                    fic.fandoms?.join(", ") ?? "-";
+                document.getElementById("ficPairings").innerText =
+                    fic.pairings?.join(", ") ?? "-";
+                document.getElementById("ficTags").innerText =
+                    fic.tags?.join(", ") ?? "-";
+                document.getElementById("ficDescription").innerText =
+                    fic.description ?? "";
+
+                document.getElementById("btnEpub").disabled = false;
+                document.getElementById("btnTxt").disabled = false;
+                document.getElementById("estimated").innerText =
+                    `Estimated download time: ${fic.chapters.length * 2} sec`;
+
+
+            }
+
+            async function triggerDownload(format) {
+
+                var url = urlInput.value;
+                if (!url) return;
+
+                var btnEpub = document.getElementById("btnEpub");
+                var btnTxt = document.getElementById("btnTxt");
+                var loader = document.getElementById("downloadLoading");
+                var queueText = document.getElementById("queueText");
+
+                btnEpub.disabled = true;
+                btnTxt.disabled = true;
+                loader.style.display = "block";
+
+                try {
+
+                    var endpoint = format === "epub" ? "/download/epub" : "/download/txt";
+
+                    var response = await fetch(endpoint, {
+                        method: "POST",
+                        body: new URLSearchParams({ Url: url })
+                    });
+
+                    var pos = response.headers.get("X-Queue-Position");
+                    if (pos)
+                        queueText.innerText = `You're #${pos} in queue`;
+
+                    if (!response.ok) return;
+
+                    var blob = await response.blob();
+
+                    var disposition = response.headers.get("content-disposition");
+                    var fileName = "fanfic";
+
+                    if (disposition) {
+                        var parts = disposition.split(";");
+                        for (var p of parts) {
+                            p = p.trim();
+                            if (p.startsWith("filename*="))
+                                fileName = decodeURIComponent(p.split("''")[1]);
+                            else if (p.startsWith("filename="))
+                                fileName = p.replace("filename=", "").replace(/"/g, "");
+                        }
+                    }
+
+                    var link = document.createElement("a");
+                    var objectUrl = window.URL.createObjectURL(blob);
+
+                    link.href = objectUrl;
+                    link.download = fileName;
+                    link.click();
+
+                    window.URL.revokeObjectURL(objectUrl);
+                    urlInput.value = "";
+                }
+                finally {
+                    loader.style.display = "none";
+                    btnEpub.disabled = false;
+                    btnTxt.disabled = false;
+                    queueText.innerText = "";
+                }
+            }
+
+
+    </script>
+
+</body>
+
+</html>

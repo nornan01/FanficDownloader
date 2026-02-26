@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/FanficDownloader.Bot/">
+    <Project Path="FanficDownloader.Bot/FanficDownloader.bot.csproj" />
+  </Folder>
+  <Project Path="FanficDownloader.Application/FanficDownloader.Application.csproj" />
+</Solution>
