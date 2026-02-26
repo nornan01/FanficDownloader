@@ -1,0 +1,141 @@
+html {
+    min-height: 100%;
+    background: linear-gradient(180deg, #fdfcf0, #fff1cd);
+}
+
+body {
+    min-height: 100%;
+    background: transparent;
+}
+
+/* =========================
+   LAYOUT
+========================= */
+
+
+
+/* =========================
+   TITLE
+========================= */
+
+.site-title {
+    color: #6b2d5c;
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+
+
+/* =========================
+   BUTTONS (Bootstrap override via variables)
+========================= */
+
+.btn-primary {
+    --bs-btn-bg: #6b2d5c;
+    --bs-btn-border-color: #6b2d5c;
+
+    --bs-btn-hover-bg: #521f45;
+    --bs-btn-hover-border-color: #521f45;
+
+    --bs-btn-active-bg: #521f45;
+    --bs-btn-active-border-color: #521f45;
+    
+    --bs-btn-disabled-bg: #6b2d5c;
+    --bs-btn-disabled-border-color: #6b2d5c;
+
+    --bs-btn-focus-shadow-rgb: 107, 45, 92;
+}
+
+.btn-outline-primary {
+    --bs-btn-color: #6b2d5c;
+    --bs-btn-border-color: #6b2d5c;
+
+    --bs-btn-hover-bg: #6b2d5c;
+    --bs-btn-hover-border-color: #6b2d5c;
+
+    --bs-btn-active-bg: #6b2d5c;
+    --bs-btn-active-border-color: #6b2d5c;
+
+    --bs-btn-disabled-color: #6b2d5c;
+    --bs-btn-disabled-border-color: #6b2d5c;
+
+    --bs-btn-focus-shadow-rgb: 107, 45, 92;
+}
+
+
+/* =========================
+   INPUT FOCUS
+========================= */
+
+.form-control:focus {
+    border-color: #6b2d5c;
+    box-shadow: 0 0 0 0.2rem rgba(107, 45, 92, 0.25);
+}
+
+
+/* =========================
+   TEXT SELECTION
+========================= */
+
+::selection {
+    background: #6b2d5c;
+    color: white;
+}
+
+
+/* =========================
+   PREVIEW CARD ANIMATION
+========================= */
+
+.preview-card {
+    max-width: 520px;
+    width: 100%;
+    border-radius: 16px;
+
+    opacity: 0;
+    display: none;
+    transition: opacity .3s ease;
+}
+
+.preview-card.show {
+    display: block;
+    opacity: 1;
+}
+
+/* =========================
+   LOADING SPINNER
+========================= */
+
+.custom-spinner {
+    color: #6b2d5c;
+}
+
+/* =========================
+   FOOTER
+========================= */
+footer,
+.footer {
+    font-size: 14px;
+    color: #000000;
+}
+
+.footer a {
+    color: #b35c9d;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    color: #d380bf;
+    text-decoration: underline;
+}
+
+
+#estimated {
+     color: #d380bf;
+}
+
+#ficTitle {
+    color: #6b2d5c;
+    font-weight: 700;
+    font-size: 1.6rem;
+
+}

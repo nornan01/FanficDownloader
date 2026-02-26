@@ -31,6 +31,7 @@ app.UseSwaggerUI();
 
 // подключаем контроллеры
 app.MapControllers();
+app.UseStaticFiles();
 app.MapRazorPages();
 
 app.Run();

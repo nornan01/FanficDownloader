@@ -8,33 +8,47 @@
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet"   href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/css/site.css" />
+
+
+    
 </head>
 
-<body class="bg-light">
+<body>
 
-    <div class="container d-flex flex-column align-items-center justify-content-center"    style="min-height:100vh;">
+
+    <div class="container d-flex flex-column align-items-center pt-5">
 
         <div class="text-center mb-5">
-            <h1 class="fw-bold">Fanfic Downloader</h1>
+            <h1 class="fw-bold site-title">
+                Fanfic Downloader
+            </h1>
+
             <p class="text-muted">
                 Download fanfics in EPUB or TXT format
             </p>
         </div>
 
         <!-- INPUT CARD -->
-        <div class="card shadow-lg p-4" style="max-width:520px; width:100%; border-radius:16px;">
+        <div class="card shadow-lg p-4">
 
-            <input id="urlInput"        class="form-control form-control-lg"       type="text"      placeholder="Paste fanfic URL">
+
+            <div class="input-group input-group-lg">
+                <span class="input-group-text bg-white border-end-0">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+                <input id="urlInput"   class="form-control border-start-0"           type="text"           placeholder="Paste fanfic URL">
+            </div>
 
             <div class="d-flex justify-content-center gap-3 mt-3">
 
-                <button id="btnEpub"   class="btn btn-primary btn-lg flex-fill"       onclick="triggerDownload('epub')"
-                        disabled>
+                <button id="btnEpub" class="btn btn-primary btn-lg flex-fill shadow-sm"      
+                        onclick="triggerDownload('epub')"                        disabled>
                     Download EPUB
                 </button>
 
-                <button id="btnTxt"            class="btn btn-outline-primary btn-lg flex-fill"                    onclick="triggerDownload('txt')"
-                        disabled>
+                <button id="btnTxt" class="btn btn-outline-primary btn-lg flex-fill shadow-sm"         
+                        onclick="triggerDownload('txt')"                        disabled>
                     Download TXT
                 </button>
 
@@ -42,40 +56,44 @@
 
             <div class="text-center mt-3" id="downloadLoading" style="display:none;">
                 <div class="d-flex justify-content-center align-items-center gap-2">
-                    <div class="spinner-border text-primary"></div>
+                    <div class="spinner-border custom-spinner"></div>
                     <span class="text-muted">Preparing your file...</span>
                 </div>
             </div>
             <div id="queueText" class="text-center text-muted mt-2"></div>
         </div>
 
+
+
+
         <!-- PREVIEW CARD -->
-        <div id="fanficCard" class="card mt-4 shadow"
-             style="max-width:520px; width:100%; border-radius:16px; display:none; opacity:0; transition:opacity .3s;">
+        <div id="fanficCard" class="card preview-card mt-4 shadow">
+
 
             <div class="card-body">
-                <div id="estimated" class="text-muted text-center mt-2"></div>
+                <div id="estimated" class="text-center mt-2"></div>
                 <br>
                 <h5 id="ficTitle"></h5>
                 <p id="ficAuthor" class="text-muted"></p>
                 <p><strong>Fandom:</strong> <span id="ficFandoms"></span></p>
                 <p><strong>Pairings:</strong> <span id="ficPairings"></span></p>
                 <p><strong>Tags:</strong> <span id="ficTags"></span></p>
-                <p id="ficDescription"></p>
+                <p id="ficDescription" class="text-muted small"></p>
 
             </div>
         </div>
 
-        <div class="text-center mt-5 text-muted" style="font-size:14px;">
+        <div class="footer text-center mt-5">
+
             Let's preserve our favourite stories in a timeless format <br>
 
             Made with ❤️ by
             <br>
-            <a href="https://t.me/nornan" target="_blank"     class="text-decoration-none text-muted ms-1 me-2">
+            <a href="https://t.me/nornan" target="_blank"     class="text-decoration-none ms-1 me-2">
                 <i class="bi bi-telegram"></i> Telegram
             </a>
             
-            <a href="https://github.com/nornan01" target="_blank"   class="text-decoration-none text-muted ms-2">
+            <a href="https://github.com/nornan01" target="_blank"   class="text-decoration-none ms-2">
                 <i class="bi bi-github"></i> GitHub
             </a>
 
@@ -105,7 +123,7 @@
             
             async function loadPreview() {
 
-                var url = urlInput.value;
+                var url = urlInput.value.trim();
                 if (!url) return;
 
                 var response = await fetch("/download/info", {
@@ -117,29 +135,34 @@
 
                 var fic = await response.json();
 
+                if (!fic || !fic.title) return;
+
                 var card = document.getElementById("fanficCard");
-                card.style.display = "block";
-                setTimeout(() => card.style.opacity = "1", 10);
+                card.classList.add("show");
 
                 document.getElementById("ficTitle").innerText = fic.title;
                 document.getElementById("ficAuthor").innerText =
                     fic.authors?.join(", ") ?? "Unknown author";
+
                 document.getElementById("ficFandoms").innerText =
                     fic.fandoms?.join(", ") ?? "-";
+
                 document.getElementById("ficPairings").innerText =
                     fic.pairings?.join(", ") ?? "-";
+
                 document.getElementById("ficTags").innerText =
                     fic.tags?.join(", ") ?? "-";
+
                 document.getElementById("ficDescription").innerText =
                     fic.description ?? "";
 
                 document.getElementById("btnEpub").disabled = false;
                 document.getElementById("btnTxt").disabled = false;
+
                 document.getElementById("estimated").innerText =
-                    `Estimated download time: ${fic.chapters.length * 2} sec`;
-
-
+                    `Estimated download time: ${fic.chapters?.length * 2 ?? 0} sec`;
             }
+
 
             async function triggerDownload(format) {
 

@@ -39,6 +39,18 @@ public class FanficTxtFormatter
             sb.AppendLine(HtmlToPlainText(chapter.Text));
             sb.AppendLine();
         }
+        sb.AppendLine();
+        sb.AppendLine("––––––––––––––––––––");
+        sb.AppendLine();
+        sb.AppendLine("Thank you for using Fanfic Downloader 💜");
+        sb.AppendLine();
+        sb.AppendLine("Join our Telegram channel for updates, new supported websites, and improvements:");
+        sb.AppendLine("https://t.me/fanficdownloaderhub");
+        sb.AppendLine();
+        sb.AppendLine("Have suggestions or want to see support for another site?");
+        sb.AppendLine("Send us your ideas — we’re building this together.");
+        sb.AppendLine();
+        sb.AppendLine("Happy reading ✨");
 
         return sb.ToString();
     }
