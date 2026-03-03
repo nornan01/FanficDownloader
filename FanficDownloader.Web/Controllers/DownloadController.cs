@@ -3,6 +3,9 @@ using FanficDownloader.Web.Dtos;
 using Microsoft.AspNetCore.Mvc;
 using FanficDownloader.Core.Models;
 using FanficDownloader.Application.Models;
+using FanficDownloader.Web.Services;
+using System.Runtime.Versioning;
+using System.Security.Cryptography.X509Certificates;
 
 
 namespace FanficDownloader.Web.Controllers;
@@ -29,19 +32,22 @@ public class DownloadController : ControllerBase
         var position = _queue.GetQueueLength() + 1;
         Response.Headers["X-Queue-Position"] = position.ToString();
 
-        await _queue.Enqueue(async () =>
-        {
-            try
-            {
-                var file = await _downloadService.BuildTxtAsync(request.Url, ct);
-                tcs.SetResult(file);
-            }
-            catch (Exception ex)
-            {
-                tcs.SetException(ex);
-            }
-        });
+        await _queue.EnqueueWithPosition(async (queueCt) =>
+                {
+                    try
+                    {
+                        using var scope = HttpContext.RequestServices.CreateScope();
+                        var downloadService = scope.ServiceProvider
+                                                    .GetRequiredService<FanficDownloadService>();
 
+                        var file = await downloadService.BuildTxtAsync(request.Url, queueCt);
+                        tcs.SetResult(file);
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                });
         var result = await tcs.Task;
 
         return File(result.Bytes, result.ContentType, result.FileName);
@@ -58,19 +64,22 @@ public class DownloadController : ControllerBase
         var position = _queue.GetQueueLength() + 1;
         Response.Headers["X-Queue-Position"] = position.ToString();
 
-        await _queue.Enqueue(async () =>
-        {
-            try
-            {
-                var file = await _downloadService.BuildEpubAsync(request.Url, ct);
-                tcs.SetResult(file);
-            }
-            catch (Exception ex)
-            {
-                tcs.SetException(ex);
-            }
-        });
+        await _queue.EnqueueWithPosition(async (queueCt) =>
+                    {
+                        try
+                        {
+                            using var scope = HttpContext.RequestServices.CreateScope();
+                            var downloadService = scope.ServiceProvider
+                                                    .GetRequiredService<FanficDownloadService>();
 
+                            var file = await downloadService.BuildEpubAsync(request.Url, queueCt);
+                            tcs.SetResult(file);
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.SetException(ex);
+                        }
+                    });
         var result = await tcs.Task;
 
         return File(result.Bytes, result.ContentType, result.FileName);
@@ -91,5 +100,8 @@ public class DownloadController : ControllerBase
             return BadRequest("Source not supported");
         }
     }
+
+
+    
 
 }

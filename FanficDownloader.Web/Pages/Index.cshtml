@@ -57,10 +57,10 @@
             <div class="text-center mt-3" id="downloadLoading" style="display:none;">
                 <div class="d-flex justify-content-center align-items-center gap-2">
                     <div class="spinner-border custom-spinner"></div>
-                    <span class="text-muted">Preparing your file...</span>
+                    <span id="queueText" class="text-muted">
+                    </span>
                 </div>
             </div>
-            <div id="queueText" class="text-center text-muted mt-2"></div>
         </div>
 
 
@@ -179,6 +179,16 @@
                 loader.style.display = "block";
 
                 try {
+                    var queueResponse = await fetch("/queue/position");
+                    var queueData = await queueResponse.json();
+
+                    var myPosition = queueData.position + 1;
+
+                    if (myPosition === 1) {
+                        queueText.innerText = "You're next! Preparing your file...";
+                    } else {
+                        queueText.innerText = `You're #${myPosition} in queue. Preparing your file...`;
+                    }
 
                     var endpoint = format === "epub" ? "/download/epub" : "/download/txt";
 
@@ -187,9 +197,7 @@
                         body: new URLSearchParams({ Url: url })
                     });
 
-                    var pos = response.headers.get("X-Queue-Position");
-                    if (pos)
-                        queueText.innerText = `You're #${pos} in queue`;
+                    
 
                     if (!response.ok) return;
 
