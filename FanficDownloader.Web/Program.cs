@@ -1,12 +1,5 @@
-using FanficDownloader.Core.Sources;
-using FanficDownloader.Application.Services;
-using FanficDownloader.Core.Parsers;
-using FanficDownloader.Core.Formatting;
-using FanficDownloader.Core.Clients;
-using FanficDownloader.Bot.Services;
-using FanficDownloader.Web.Services;
-
-
+using FanficDownloader.Web;
+using FanficDownloader.Application.Configuration;
 using System.Text;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -18,39 +11,10 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
 
-builder.Services.AddHostedService<TelegramBotBackgroundService>();
-builder.Services.AddSingleton<DownloadQueueService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<DownloadQueueService>());
-builder.Services.AddHttpClient<FanficEpubFormatter>();
+builder.Services.Configure<DownloadSettings>(builder.Configuration.GetSection("Download"));
+builder.Services.Configure<FlareSolverrSettings>(builder.Configuration.GetSection("FlareSolverr"));
 
-
-
-builder.Services.AddSingleton<SourceManager>();
-builder.Services.AddScoped<FanficDownloadService>();
-builder.Services.AddHttpClient<ImageDownloadService>();
-builder.Services.AddScoped<FanficService>();
-
-// Парсеры
-builder.Services.AddTransient<FicbookParser>();
-builder.Services.AddTransient<SnapetalesParser>();
-builder.Services.AddTransient<FanfictionNetParser>();
-builder.Services.AddTransient<WalkingThePlankParser>();
-
-// FlareSolverr
-builder.Services.AddHttpClient<FlareSolverrClient>(client =>
-{
-    client.BaseAddress = new Uri("http://localhost:8191");
-    client.Timeout = TimeSpan.FromSeconds(120);
-});
-
-builder.Services.AddHttpClient<IFanficSource, FicbookSource>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-
-builder.Services.AddHttpClient<IFanficSource, SnapetalesSource>();
-builder.Services.AddTransient<IFanficSource, FanfictionNetSource>();
-builder.Services.AddHttpClient<IFanficSource, WalkingThePlankSource>();
+builder.Services.AddFanficDownloader();
 
 var app = builder.Build();
 

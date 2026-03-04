@@ -125,16 +125,16 @@ public class TelegramBotBackgroundService : BackgroundService
 
             var messageUrl = pendingFanfic.SourceUrl;
 
-            var position = await _queue.EnqueueWithPosition(async (cancellationToken) =>
+            var position = await _queue.EnqueueWithPosition(async (ct) =>
             {
                 using var scope = _scopeFactory.CreateScope();
                 var fanficService = scope.ServiceProvider.GetRequiredService<FanficService>();
 
                 if (data == "format:txt")
-                    await fanficService.SendFanficAsTxtAsync(botClient, chatId, messageUrl, CancellationToken.None);
+                    await fanficService.SendFanficAsTxtAsync(botClient, chatId, messageUrl, ct);
 
                 if (data == "format:epub")
-                    await fanficService.SendFanficAsEpubAsync(botClient, chatId, messageUrl, CancellationToken.None);
+                    await fanficService.SendFanficAsEpubAsync(botClient, chatId, messageUrl, ct);
             });
 
             await botClient.SendMessage(
@@ -281,5 +281,12 @@ public class TelegramBotBackgroundService : BackgroundService
     {
         Console.WriteLine(exception);
         return Task.CompletedTask;
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Stopping Telegram bot");
+        await base.StopAsync(cancellationToken);
+        _logger.LogInformation("Telegram bot stopped");
     }
 }
