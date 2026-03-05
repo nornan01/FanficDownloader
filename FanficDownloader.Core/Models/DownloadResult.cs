@@ -6,4 +6,5 @@ public class DownloadResult
     public int TotalChapters { get; set; }
     public int LoadedChapters { get; set; }
     public List<int> FailedChapters { get; set; } = new();
+    public byte[]? EpubBytes { get; set; }
 }

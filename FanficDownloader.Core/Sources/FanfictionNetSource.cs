@@ -26,7 +26,7 @@ public class FanfictionNetSource : IFanficSource
 
     public bool CanHandle(string url)
         => url.Contains("fanfiction.net");
-    
+
     public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
     {
 
@@ -35,7 +35,7 @@ public class FanfictionNetSource : IFanficSource
         var fanfic = _parser.Parse(html, url);
         fanfic.SourceUrl = url;
         _logger.LogInformation("Parsed fanfic info for {Url}. Chapters: {ChapterCount}", url, fanfic.Chapters.Count);
-        return fanfic; 
+        return fanfic;
     }
     public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
     {

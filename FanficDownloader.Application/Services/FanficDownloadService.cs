@@ -149,6 +149,20 @@ public class FanficDownloadService
     public async Task<DownloadFileResult> BuildEpubAsync(string url, CancellationToken ct)
     {
         _logger.LogInformation("Starting EPUB build for {Url}", url);
+        var ficHub = await TryGetFicHubEpubAsync(url, ct);
+
+        if (ficHub != null)
+        {
+            _logger.LogInformation("FicHub returned ready EPUB for {Url}", url);
+
+            return new DownloadFileResult
+            {
+                Bytes = ficHub.Value.Bytes,
+                ContentType = "application/epub+zip",
+                FileName = BuildSafeFileName(ficHub.Value.Title, "epub")
+            };
+        }
+
         var (fanfic, tempFiles) = await DownloadFullAsync(url, ct);
 
         string? path = null;
@@ -194,6 +208,45 @@ public class FanficDownloadService
 
         return $"{safeTitle}.{ext}";
     }
+    private async Task<(byte[] Bytes, string Title)?> TryGetFicHubEpubAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            var encoded = Uri.EscapeDataString(url);
+            var api = $"https://fichub.net/api/v0/epub?q={encoded}";
 
-    
+            var json = await _http.GetStringAsync(api, ct);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("err", out var err) || err.GetInt32() != 0)
+                return null;
+
+            if (!doc.RootElement.TryGetProperty("epub_url", out var epubProp))
+                return null;
+
+            var path = epubProp.GetString();
+            if (string.IsNullOrEmpty(path))
+                return null;
+
+            var title = doc.RootElement
+                       .GetProperty("meta")
+                       .GetProperty("title")
+                       .GetString();
+
+            if (string.IsNullOrEmpty(title))
+                title = "fanfic";
+
+            var fullUrl = "https://fichub.net" + path;
+
+            var bytes = await _http.GetByteArrayAsync(fullUrl, ct);
+
+            return (bytes, title);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
 }
