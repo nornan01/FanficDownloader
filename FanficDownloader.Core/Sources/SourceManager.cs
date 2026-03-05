@@ -1,19 +1,30 @@
+using System.ComponentModel.DataAnnotations;
 using FanficDownloader.Core.Models;
 using FanficDownloader.Core.Sources;
-
+using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic;
 public class SourceManager
 {
-    private readonly List<IFanficSource> _sources = new()
+    private readonly IEnumerable<IFanficSource> _sources;
+    private readonly ILogger<SourceManager> _logger;
+    
+    public SourceManager(IEnumerable<IFanficSource> sources, ILogger<SourceManager> logger)
     {
-        new FicbookSource(),
-        new SnapetalesSource(),
-        new FanfictionNetSource(),
-        new WalkingThePlankSource()
-    };
+        _logger = logger;   
+        _sources = sources;
+    }
 
     public IFanficSource GetSource(string url)
     {
-        return _sources.FirstOrDefault(s => s.CanHandle(url))
-            ?? throw new NotSupportedException();
+        _logger.LogInformation("Getting source for URL: {Url}", url);
+        
+        var source = _sources.FirstOrDefault(s => s.CanHandle(url));
+        if (source == null)
+        {
+            _logger.LogWarning("No source found for URL: {Url}", url);
+            throw new NotSupportedException($"No source found for URL: {url}");
+        }
+        _logger.LogInformation("Source {SourceType} will handle URL: {Url}", source.GetType().Name, url);
+        return source;  
     }
 }

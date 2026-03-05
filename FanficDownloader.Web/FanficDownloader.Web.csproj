@@ -15,7 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\FanficDownloader.Core\FanficDownloader.Core.csproj" />
     <ProjectReference Include="..\FanficDownloader.Application\FanficDownloader.Application.csproj" />
-    <ProjectReference Include="..\FanficDownloader.Bot\FanficDownloader.Bot.csproj" />
+    <ProjectReference Include="..\FanficDownloader.Bot\FanficDownloader.bot.csproj" />
   </ItemGroup>
 
 </Project>

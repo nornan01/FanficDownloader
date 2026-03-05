@@ -3,4 +3,7 @@
     <Project Path="FanficDownloader.Bot/FanficDownloader.bot.csproj" />
   </Folder>
   <Project Path="FanficDownloader.Application/FanficDownloader.Application.csproj" />
+  <Project Path="FanficDownloader.Core/FanficDownloader.Core.csproj" />
+  <Project Path="FanficDownloader.Tests/FanficDownloader.Tests.csproj" />
+  <Project Path="FanficDownloader.Web/FanficDownloader.Web.csproj" />
 </Solution>

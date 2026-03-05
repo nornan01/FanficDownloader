@@ -3,28 +3,35 @@ using System.IO.Compression;
 using System.Text;
 using System.Linq;
 using System.Text.RegularExpressions;
-
+using System.Reflection.PortableExecutable;
 
 namespace FanficDownloader.Core.Formatting;
 
 
 public class FanficEpubFormatter
 {
-    private readonly HttpClient _http = new();
+    private readonly HttpClient _http;
 
-    public string BuildEpubFile(Fanfic fanfic)
+    public FanficEpubFormatter(
+        HttpClient http)
+    {
+        _http = http;
+    }
+
+    public async Task<string> BuildEpubFileAsync(Fanfic fanfic, CancellationToken cancellationToken)
     {
         var safeTitle = string.Concat(
             fanfic.Title.Where(c => !Path.GetInvalidFileNameChars().Contains(c))
         );
 
         var tempRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        string? epubPath = null;
         var metaInf = Path.Combine(tempRoot, "META-INF");
         var oebps = Path.Combine(tempRoot, "OEBPS");
         
 
 
-
+try{
         Directory.CreateDirectory(tempRoot);
         Directory.CreateDirectory(metaInf);
         Directory.CreateDirectory(oebps);
@@ -56,8 +63,7 @@ public class FanficEpubFormatter
         // cover
         if (!string.IsNullOrEmpty(fanfic.CoverUrl))
         {
-            using var http = new HttpClient();
-            var bytes = http.GetByteArrayAsync(fanfic.CoverUrl).Result;
+            var bytes = await _http.GetByteArrayAsync(fanfic.CoverUrl, cancellationToken);
             File.WriteAllBytes(Path.Combine(oebps, "cover.jpg"), bytes);
 
             File.WriteAllText(Path.Combine(oebps, "cover.xhtml"), """
@@ -136,7 +142,7 @@ public class FanficEpubFormatter
 
                 try
                 {
-                    var bytes = _http.GetByteArrayAsync(url).Result;
+                    var bytes = await _http.GetByteArrayAsync(url, cancellationToken);
                     if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
                         continue;
 
@@ -145,8 +151,10 @@ public class FanficEpubFormatter
 
                     File.WriteAllBytes(Path.Combine(imagesDir, name), bytes);
                 }
-                catch { }
-            }
+                    catch (Exception ex)
+                    {
+                    }
+                }
 
             // заменить ссылки в html
             ch.Text = Regex.Replace(
@@ -274,7 +282,7 @@ public class FanficEpubFormatter
         );
 
         // zip
-        var epubPath = Path.Combine(Path.GetTempPath(), $"{safeTitle}.epub");
+        epubPath = Path.Combine(Path.GetTempPath(), $"{safeTitle}.epub");
 
         using (var fs = new FileStream(epubPath, FileMode.Create))
         using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
@@ -294,8 +302,19 @@ public class FanficEpubFormatter
             }
         }
 
-        Directory.Delete(tempRoot, true);
         return epubPath;
+        }
+        finally
+        {
+            try
+            {
+                if(Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+            catch (Exception ex)
+            {
+            }
+        }
     }
 
     private string BuildChapterHtml(Chapter chapter)

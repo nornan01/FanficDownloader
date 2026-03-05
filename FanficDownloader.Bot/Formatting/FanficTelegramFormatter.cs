@@ -1,6 +1,6 @@
 using FanficDownloader.Core.Models;
 
-class FanficTelegramFormatter
+public class FanficTelegramFormatter
 {
     public string FormatInfoMessage(Fanfic fanfic)
     {

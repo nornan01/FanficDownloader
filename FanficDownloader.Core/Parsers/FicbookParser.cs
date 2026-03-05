@@ -162,7 +162,36 @@ public class FicbookParser
         });
         return chapters;
     }
+    // the old one, it was too simple and lost formatting from time to time 
+    // public string ParseChapterText(string html)
+    // {
+    //     var doc = new HtmlDocument();
+    //     doc.LoadHtml(html);
 
+    //     var content = doc.DocumentNode.SelectSingleNode("//div[@id='content']");
+    //     if (content == null)
+    //         return "";
+
+    //     var text = HtmlEntity.DeEntitize(content.InnerText);
+
+    //     text = text.Replace("\r", "");
+
+    //     var paragraphs = Regex.Split(text, @"\n+");
+
+    //     var sb = new StringBuilder();
+
+    //     foreach (var p in paragraphs)
+    //     {
+    //         var clean = p.Trim();
+
+    //         if (string.IsNullOrWhiteSpace(clean))
+    //             continue;
+
+    //         sb.Append($"<p>{System.Net.WebUtility.HtmlEncode(clean)}</p>\n");
+    //     }
+
+    //     return sb.ToString();
+    // }
 
 
     public string ParseChapterText(string html)
@@ -171,39 +200,41 @@ public class FicbookParser
         doc.LoadHtml(html);
 
         var content = doc.DocumentNode.SelectSingleNode("//div[@id='content']");
-        
         if (content == null)
             return "";
 
-        content.SelectNodes(".//div[contains(@class,'fb-ads-block')]")
-            ?.ToList()
-            .ForEach(n => n.Remove());
-
-        var raw = content.InnerHtml
-            .Replace("\r", "");
-
-        // разбиваем на абзацы по пустым строкам
-        var blocks = Regex.Split(raw, @"\n\s*\n");
-
         var sb = new StringBuilder();
 
-        foreach (var block in blocks)
+        foreach (var node in content.ChildNodes)
         {
-            var temp = new HtmlDocument();
-            temp.LoadHtml(block);
+            if (node.Name == "#text")
+            {
+                var text = HtmlEntity.DeEntitize(node.InnerText)
+                    .Replace("\r", "");
 
-            var inner = new StringBuilder();
-            foreach (var n in temp.DocumentNode.ChildNodes)
-                inner.Append(CleanNode(n));
+                var lines = Regex.Split(text, @"\n+");
 
-            var text = inner.ToString().Trim();
-            if (text.Length > 0)
-                sb.Append($"<p>{text}</p>\n");
+                foreach (var line in lines)
+                {
+                    var clean = line.Trim();
+
+                    if (string.IsNullOrWhiteSpace(clean))
+                        continue;
+
+                    sb.Append($"<p>{System.Net.WebUtility.HtmlEncode(clean)}</p>\n");
+                }
+            }
+            else
+            {
+                var cleaned = CleanNode(node).Trim();
+
+                if (!string.IsNullOrWhiteSpace(cleaned))
+                    sb.Append($"<p>{cleaned}</p>\n");
+            }
         }
 
         return sb.ToString();
     }
-
     private string CleanNode(HtmlNode node)
     {
         if (node.Name == "#text")
@@ -242,6 +273,9 @@ public class FicbookParser
                 return "";
 
             case "div":
+                return CleanChildren(node);
+
+            case "p":
                 return CleanChildren(node);
 
             default:
