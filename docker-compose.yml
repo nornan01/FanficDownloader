@@ -7,7 +7,7 @@ services:
     environment:
       - TG_BOT_TOKEN=${TG_BOT_TOKEN}
       - ASPNETCORE_URLS=http://+:8080
-      - FLARESOLVERR_URL=http://flaresolverr:8191
+      - FLARESOLVERR__URL=http://flaresolverr:8191
 
     ports:
       - "8080:8080"
