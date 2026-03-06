@@ -25,4 +25,6 @@ app.MapControllers();
 app.UseStaticFiles();
 app.MapRazorPages();
 
+app.MapGet("/health", () => Results.Ok("OK"));
+
 app.Run();
