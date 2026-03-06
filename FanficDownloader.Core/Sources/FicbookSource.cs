@@ -34,7 +34,17 @@ public class FicbookSource : IFanficSource
     public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
     {
         _logger.LogInformation("Fetching fanfic info from ficbook.net for {Url}", url);
-        var html = await _http.GetStringAsync(url, ct);
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+
+        request.Headers.Accept.ParseAdd(
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+
+        request.Headers.AcceptLanguage.ParseAdd("ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+
+        var response = await _http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+
+        var html = await response.Content.ReadAsStringAsync(ct);
         var fanfic = _parser.Parse(html);
         fanfic.SourceUrl = url;
 
