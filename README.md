@@ -1,42 +1,185 @@
 # Fanfic Downloader
 
-Download fanfics as EPUB or TXT via a web UI, API, or Telegram bot.
+![.NET](https://img.shields.io/badge/.NET-10-blue)
+![Status](https://img.shields.io/badge/status-active-success)
 
-## Features
+Live demo: https://fanficdownloader.com
 
-- Web UI for quick downloads (EPUB/TXT)
-- REST API endpoints
+
+Fanfic Downloader is a web service that downloads fanfics from supported websites and generates **EPUB** or **TXT** files.
+
+The service provides:
+
+- Web interface
+- REST API
 - Telegram bot integration
+
+It is designed as a small production-ready service with a queue-based architecture to safely process downloads without overloading the server.
+
+---
+
+# Features
+
+- Download fanfics as **EPUB** or **TXT**
+- Web UI for quick downloads
+- REST API for automation
+- Telegram bot integration
+- Queue-based download system
+- Configurable concurrency
 - Source-specific parsers
-- Queue with configurable concurrency
-- Optional FlareSolverr support for Cloudflare-protected sources
+- Optional Cloudflare bypass via FlareSolverr
+- Docker deployment
+- Nginx reverse proxy
+- HTTPS via Let's Encrypt
+- Health endpoint for monitoring
 
-## Supported sources
+---
 
-- ficbook.net
-- snapetales.com
-- fanfiction.net (via FlareSolverr)
-- walkingtheplank.org
+# Supported sources
 
-## Tech stack
+Currently supported fanfiction sites:
+
+- ficbook.net  
+- snapetales.com  
+- fanfiction.net *(via FlareSolverr)*  
+- walkingtheplank.org  
+
+Additional sources can be added by implementing new `IFanficSource` implementations.
+
+---
+
+# Architecture
+
+Typical production architecture:
+
+```
+Internet
+↓
+Nginx (HTTPS / reverse proxy)
+↓
+ASP.NET Core (Kestrel)
+↓
+FanficDownloader service
+↓
+Download queue
+↓
+Fanfic parsers
+↓
+EPUB/TXT generation
+```
+
+Downloads are processed through an internal queue to:
+
+- limit concurrency
+- prevent server overload
+- ensure stable performance
+
+---
+
+# Tech stack
+
+Backend
 
 - .NET 10
-- ASP.NET Core (Web + API)
+- ASP.NET Core
+- Kestrel web server
 - Background services
 
-## Project structure
+Infrastructure
 
-- `FanficDownloader.Web` — web UI, API, hosted services
-- `FanficDownloader.Application` — application services, configuration
-- `FanficDownloader.Core` — parsers, sources, formatting
-- `FanficDownloader.Bot` — Telegram bot service
-- `Fanficdownloader.tests` — unit tests
+- Docker
+- Nginx reverse proxy
+- Let's Encrypt HTTPS
+- FlareSolverr (optional)
 
-## Quick start
+---
 
-### 1) Configure
+# Project structure
 
-Edit `FanficDownloader.Web/appsettings.json`:
+```
+FanficDownloader
+
+FanficDownloader.Web
+    Controllers
+        DownloadController
+        QueueController
+    Services
+        DownloadQueueService
+        TelegramBotBackgroundService
+    Pages
+        Index.cshtml
+    Program.cs
+    wwwroot
+
+FanficDownloader.Application
+    Services
+        FanficDownloadService
+        ImageDownloadService
+    Configuration
+        DownloadSettings
+        FlareSolverrSettings
+    Security
+        UrlValidator
+    Models
+        DownloadFileResult
+
+FanficDownloader.Core
+    Sources
+        FicbookSource
+        FanfictionNetSource
+        SnapetalesSource
+        WalkingThePlankSource
+        SourceManager
+    Parsers
+        FicbookParser
+        FanfictionNetParser
+        SnapetalesParser
+        WalkingThePlankParser
+    Formatting
+        FanficEpubFormatter
+        FanficTxtFormatter
+    Clients
+        FlareSolverrClient
+    Models
+        Fanfic
+        Chapter
+        DownloadResult
+        ImageInfo
+
+FanficDownloader.Bot
+    Services
+        FanficService
+    Formatting
+        FanficTelegramFormatter
+
+FanficDownloader.Tests
+    Parser tests
+    Formatter tests
+    Source tests
+```
+
+---
+
+# Quick start
+
+## 1. Clone repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/FanficDownloader.git
+cd FanficDownloader
+```
+
+---
+
+## 2. Configure
+
+Edit:
+
+```
+FanficDownloader.Web/appsettings.json
+```
+
+Example configuration:
 
 ```json
 {
@@ -49,43 +192,187 @@ Edit `FanficDownloader.Web/appsettings.json`:
 }
 ```
 
-Set the Telegram token (optional, for the bot):
+Optional: set Telegram bot token
 
-- `TG_BOT_TOKEN` environment variable
+```
+TG_BOT_TOKEN=<your_token>
+```
 
-### 2) Run the web app
+---
+
+## 3. Run the application
 
 ```bash
 dotnet restore
 dotnet run --project FanficDownloader.Web
 ```
 
-Open the web UI at `http://localhost:5000` (or the URL printed by `dotnet run`).
+Open in browser:
 
-### 3) (Optional) Run FlareSolverr
+```
+http://localhost:5000
+```
 
-Fanfiction.net requests go through FlareSolverr. Start it and ensure the URL
-matches `FlareSolverr:Url` in `appsettings.json`.
+---
 
-## API endpoints
+## 4. Run FlareSolverr (optional)
 
-- `POST /download/info` — metadata preview
-- `POST /download/txt` — download TXT
-- `POST /download/epub` — download EPUB
-- `GET /queue/position` — current queue length
+Fanfiction.net is protected by Cloudflare.
 
-## Telegram bot
+Start FlareSolverr and ensure the URL matches the configuration.
 
-The bot is hosted inside the Web project as a background service. If you set
-`TG_BOT_TOKEN`, it will start automatically when the web app runs.
+Example:
 
-## Tests
+```
+http://localhost:8191
+```
 
-```bash
+---
+
+# API endpoints
+
+| Endpoint | Description |
+|--------|--------|
+| POST /download/info | Fetch fanfic metadata |
+| POST /download/txt | Download TXT |
+| POST /download/epub | Download EPUB |
+| GET /queue/position | Queue position |
+| GET /health | Health check |
+
+---
+
+# Health endpoint
+
+The service exposes a simple health endpoint.
+
+```
+GET /health
+```
+
+Example:
+
+```
+https://fanficdownloader.com/health
+```
+
+Response:
+
+```
+OK
+```
+
+This endpoint can be used by:
+
+- monitoring systems
+- uptime checks
+- container health checks
+
+---
+
+# Queue system
+
+All downloads are processed through an internal queue.
+
+This ensures that:
+
+- only a limited number of downloads run simultaneously
+- the server cannot be overloaded
+- large downloads do not block the system
+
+Concurrency is controlled via:
+
+```
+Download:MaxConcurrentDownloads
+```
+
+---
+
+# Telegram bot
+
+The Telegram bot runs as a background service inside the web host.
+
+If `TG_BOT_TOKEN` is set, the bot automatically starts when the application launches.
+
+---
+
+# Deployment
+
+Typical production deployment:
+
+1. Docker container running the application  
+2. Nginx reverse proxy  
+3. HTTPS via Let's Encrypt  
+4. Optional Cloudflare DNS  
+
+Deployment workflow:
+
+```
+git push
+↓
+ssh server
+↓
+git pull
+↓
+docker compose up -d --build
+```
+
+---
+
+# Running tests
+
+```
 dotnet test
 ```
 
-## Notes
+---
 
-- The queue concurrency is controlled via `Download:MaxConcurrentDownloads`.
-- Temporary files are created during image downloads and EPUB builds.
+# Contributing
+
+Contributions are welcome.
+
+If you'd like to contribute:
+
+1. Fork the repository
+2. Create a feature branch
+
+```
+git checkout -b feature/my-feature
+```
+
+3. Implement your changes
+4. Add tests if applicable
+5. Commit and push
+
+```
+git commit -m "Add new feature"
+git push
+```
+
+6. Open a Pull Request
+
+Please ensure that:
+
+- the project builds successfully
+- tests pass
+- new features include tests when possible
+
+---
+
+## UI contributions welcome
+
+The current web interface is intentionally minimal.
+
+If you'd like to contribute improvements to the UI or create a better design, contributions are very welcome.
+
+Frontend improvements, UI redesigns, and UX enhancements would be greatly appreciated.
+
+# Future improvements
+
+Possible future features:
+
+- caching downloaded fanfics
+- rate limiting
+- download size limits
+- monitoring (CPU / memory)
+- additional fanfiction sources
+- UI improvements
