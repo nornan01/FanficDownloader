@@ -51,6 +51,9 @@ public static class DependencyInjection
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
+        //services
+
+        services.AddSingleton<ProxyService>();
 
         services.AddHttpClient<IFanficSource, SnapetalesSource>();
         services.AddTransient<IFanficSource, FanfictionNetSource>();

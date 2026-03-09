@@ -1,8 +1,9 @@
 using FanficDownloader.Core.Models;
 using FanficDownloader.Core.Parsers;
 using FanficDownloader.Core.Clients;
-using FanficDownloader.Core.Models;
 using Microsoft.Extensions.Logging;
+using FanficDownloader.Application.Services;
+using System.Net;
 
 
 
@@ -14,13 +15,15 @@ public class FicbookSource : IFanficSource
     private readonly HttpClient _http;
     private readonly FicbookParser _parser;
     private readonly ILogger<FicbookSource> _logger;
+    private readonly ProxyService _proxyService;
+    private string? _workingProxy;
 
-    public FicbookSource(HttpClient http, FicbookParser parser, ILogger<FicbookSource> logger)
+    public FicbookSource(HttpClient http, FicbookParser parser, ILogger<FicbookSource> logger, ProxyService proxyService)
     {
         _http = http;
         _parser = parser;
         _logger = logger;
-
+        _proxyService = proxyService;
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
             "AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -41,7 +44,9 @@ public class FicbookSource : IFanficSource
 
         request.Headers.AcceptLanguage.ParseAdd("ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
 
-        var response = await _http.SendAsync(request, ct);
+        var response = await SendWithFallbackAsync(request, ct);
+
+        
         response.EnsureSuccessStatusCode();
 
         var html = await response.Content.ReadAsStringAsync(ct);
@@ -56,6 +61,7 @@ public class FicbookSource : IFanficSource
 
         _logger.LogInformation("Parsed fanfic info for {Url}. Chapters: {ChapterCount}", url, fanfic.Chapters.Count);
         return fanfic;
+        
     }
 
     public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
@@ -77,7 +83,9 @@ public class FicbookSource : IFanficSource
 
                 _logger.LogDebug("Fetching chapter {ChapterNumber} from {ChapterUrl}",
                     chapter.Number, chapter.Url);
-                var html = await _http.GetStringAsync(chapter.Url, ct);
+                var request = new HttpRequestMessage(HttpMethod.Get, chapter.Url);
+                var response = await SendWithFallbackAsync(request, ct);
+                var html = await response.Content.ReadAsStringAsync(ct);
                 chapter.Text = _parser.ParseChapterText(html);
                 result.LoadedChapters++;
 
@@ -94,5 +102,84 @@ public class FicbookSource : IFanficSource
         _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
             fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
         return result;
+    }
+    private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        if (_workingProxy != null)
+        {
+            try
+            {
+                var proxy = new WebProxy(_workingProxy);
+
+                var handler = new HttpClientHandler
+                {
+                    Proxy = proxy,
+                    UseProxy = true
+                };
+
+                using var proxyClient = new HttpClient(handler);
+
+                proxyClient.DefaultRequestHeaders.UserAgent.ParseAdd(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                    "Chrome/120.0.0.0 Safari/537.36"
+                );
+
+                var proxyResponse = await proxyClient.SendAsync(request, ct);
+
+                if (proxyResponse.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Using cached working proxy");
+                    return proxyResponse;
+                }
+            }
+            catch
+            {
+                _workingProxy = null;
+            }
+        }
+
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                var proxyUrl = _proxyService.GetRandomProxy();
+
+                if (proxyUrl == null)
+                    break;
+
+                var proxy = new WebProxy(proxyUrl);
+
+                var handler = new HttpClientHandler
+                {
+                    Proxy = proxy,
+                    UseProxy = true
+                };
+
+                using var proxyClient = new HttpClient(handler);
+
+                proxyClient.DefaultRequestHeaders.UserAgent.ParseAdd(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                    "Chrome/120.0.0.0 Safari/537.36"
+                );
+
+                var proxyResponse = await proxyClient.SendAsync(request, ct);
+
+                if (proxyResponse.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Proxy attempt {Attempt} succeeded", attempt);
+                    _workingProxy = proxyUrl;
+                    return proxyResponse;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Proxy attempt {Attempt} failed", attempt);
+            }
+        }
+
+        _logger.LogInformation("All proxy attempts failed");
+        throw new HttpRequestException("All proxy attempts failed");
     }
 }
