@@ -2,7 +2,7 @@ using FanficDownloader.Core.Models;
 using FanficDownloader.Core.Parsers;
 using FanficDownloader.Core.Clients;
 using Microsoft.Extensions.Logging;
-using FanficDownloader.Application.Services;
+using FanficDownloader.Core.Services;
 using System.Net;
 
 
@@ -109,7 +109,15 @@ public class FicbookSource : IFanficSource
         {
             try
             {
-                var proxy = new WebProxy(_workingProxy);
+                var uri = new Uri(_workingProxy);
+
+                var proxy = new WebProxy($"{uri.Scheme}://{uri.Host}:{uri.Port}")
+                {
+                    Credentials = new NetworkCredential(
+                        uri.UserInfo.Split(':')[0],
+                        uri.UserInfo.Split(':')[1]
+                    )
+                };
 
                 var handler = new HttpClientHandler
                 {
@@ -118,6 +126,11 @@ public class FicbookSource : IFanficSource
                 };
 
                 using var proxyClient = new HttpClient(handler);
+                proxyClient.DefaultRequestHeaders.Accept.ParseAdd(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+
+                proxyClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
+                "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
 
                 proxyClient.DefaultRequestHeaders.UserAgent.ParseAdd(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
@@ -125,30 +138,48 @@ public class FicbookSource : IFanficSource
                     "Chrome/120.0.0.0 Safari/537.36"
                 );
 
-                var proxyResponse = await proxyClient.SendAsync(request, ct);
+                var proxyRequest = new HttpRequestMessage(HttpMethod.Get, request.RequestUri);
+                foreach (var header in request.Headers)
+                {
+                    proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+                var proxyResponse = await proxyClient.SendAsync(proxyRequest, ct);
 
                 if (proxyResponse.IsSuccessStatusCode)
                 {
                     _logger.LogInformation("Using cached working proxy");
+                    _proxyService.MarkSuccess(_workingProxy);
                     return proxyResponse;
                 }
             }
             catch
             {
+                if (_workingProxy != null)
+                    _proxyService.MarkFailed(_workingProxy);
                 _workingProxy = null;
+
             }
         }
 
         for (int attempt = 1; attempt <= 3; attempt++)
         {
+            string? proxyUrl = null;
             try
             {
-                var proxyUrl = _proxyService.GetRandomProxy();
-
+                proxyUrl = _proxyService.GetRandomProxy();
+                _logger.LogInformation("Trying proxy: {Proxy}", proxyUrl);
                 if (proxyUrl == null)
                     break;
 
-                var proxy = new WebProxy(proxyUrl);
+                var uri = new Uri(proxyUrl);
+
+                var proxy = new WebProxy($"{uri.Scheme}://{uri.Host}:{uri.Port}")
+                {
+                    Credentials = new NetworkCredential(
+                        uri.UserInfo.Split(':')[0],
+                        uri.UserInfo.Split(':')[1]
+                    )
+                };
 
                 var handler = new HttpClientHandler
                 {
@@ -157,6 +188,11 @@ public class FicbookSource : IFanficSource
                 };
 
                 using var proxyClient = new HttpClient(handler);
+                proxyClient.DefaultRequestHeaders.Accept.ParseAdd(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+
+                proxyClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
+                "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
 
                 proxyClient.DefaultRequestHeaders.UserAgent.ParseAdd(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
@@ -164,18 +200,26 @@ public class FicbookSource : IFanficSource
                     "Chrome/120.0.0.0 Safari/537.36"
                 );
 
-                var proxyResponse = await proxyClient.SendAsync(request, ct);
+                var proxyRequest = new HttpRequestMessage(HttpMethod.Get, request.RequestUri);
+                foreach (var header in request.Headers)
+                {
+                    proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+                var proxyResponse = await proxyClient.SendAsync(proxyRequest, ct);
 
                 if (proxyResponse.IsSuccessStatusCode)
                 {
                     _logger.LogInformation("Proxy attempt {Attempt} succeeded", attempt);
                     _workingProxy = proxyUrl;
+                    _proxyService.MarkSuccess(proxyUrl);
                     return proxyResponse;
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Proxy attempt {Attempt} failed", attempt);
+                if (proxyUrl != null)
+                    _proxyService.MarkFailed(proxyUrl);
             }
         }
 

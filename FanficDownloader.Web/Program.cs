@@ -14,7 +14,7 @@ builder.Services.AddRazorPages();
 builder.Services.Configure<DownloadSettings>(builder.Configuration.GetSection("Download"));
 builder.Services.Configure<FlareSolverrSettings>(builder.Configuration.GetSection("FlareSolverr"));
 
-builder.Services.AddFanficDownloader();
+builder.Services.AddFanficDownloader(builder.Configuration);
 
 var app = builder.Build();
 

@@ -8,12 +8,15 @@ using FanficDownloader.Web.Services;
 using FanficDownloader.Bot.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using FanficDownloader.Core.Services;
+using Microsoft.Extensions.Configuration;
+
 
 namespace FanficDownloader.Web;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddFanficDownloader(this IServiceCollection services)
+    public static IServiceCollection AddFanficDownloader(this IServiceCollection services, IConfiguration configuration)
     {
         // Queue + background services
         services.AddSingleton<DownloadQueueService>();
@@ -52,8 +55,8 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
         });
         //services
-
-        services.AddSingleton<ProxyService>();
+        var proxies = configuration.GetSection("Proxies").Get<List<string>>() ?? new();
+        services.AddSingleton(new ProxyService(proxies));
 
         services.AddHttpClient<IFanficSource, SnapetalesSource>();
         services.AddTransient<IFanficSource, FanfictionNetSource>();
