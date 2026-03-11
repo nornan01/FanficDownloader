@@ -18,12 +18,15 @@ public class FicbookSource : IFanficSource
     private readonly ProxyService _proxyService;
     private string? _workingProxy;
 
-    public FicbookSource(HttpClient http, FicbookParser parser, ILogger<FicbookSource> logger, ProxyService proxyService)
+    private readonly FlareSolverrClient _flareSolverr;
+
+    public FicbookSource(HttpClient http, FicbookParser parser, ILogger<FicbookSource> logger, ProxyService proxyService, FlareSolverrClient flareSolverr)
     {
         _http = http;
         _parser = parser;
         _logger = logger;
         _proxyService = proxyService;
+        _flareSolverr = flareSolverr;
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
             "AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -223,7 +226,34 @@ public class FicbookSource : IFanficSource
             }
         }
 
-        _logger.LogInformation("All proxy attempts failed");
-        throw new HttpRequestException("All proxy attempts failed");
+        _logger.LogWarning("All proxy attempts failed. Trying FlareSolverr for {Url}", request.RequestUri);
+
+        try
+        {
+            var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), ct);
+
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                _logger.LogError("FlareSolverr returned empty HTML for {Url}", request.RequestUri);
+                throw new InvalidOperationException("FlareSolverr returned empty HTML");
+            }
+
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html")
+            };
+
+            _logger.LogInformation("FlareSolverr fallback succeeded for {Url}", request.RequestUri);
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "FlareSolverr fallback failed for {Url}", request.RequestUri);
+
+            throw new HttpRequestException(
+                $"All proxy attempts failed and FlareSolverr fallback failed for {request.RequestUri}",
+                ex);
+        }
     }
 }
