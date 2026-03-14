@@ -3,3 +3,4 @@ obj/
 .vscode/
 .env
 .DS_Store
+appsettings*.json

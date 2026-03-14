@@ -19,6 +19,7 @@ public class FicbookSource : IFanficSource
     private string? _workingProxy;
 
     private readonly FlareSolverrClient _flareSolverr;
+    private bool _useFlareSolverr = false;
 
     public FicbookSource(HttpClient http, FicbookParser parser, ILogger<FicbookSource> logger, ProxyService proxyService, FlareSolverrClient flareSolverr)
     {
@@ -108,7 +109,9 @@ public class FicbookSource : IFanficSource
     }
     private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, CancellationToken ct)
     {
-        if (_workingProxy != null)
+        if (!_useFlareSolverr)
+        {
+            if (_workingProxy != null)
         {
             try
             {
@@ -227,7 +230,9 @@ public class FicbookSource : IFanficSource
         }
 
         _logger.LogWarning("All proxy attempts failed. Trying FlareSolverr for {Url}", request.RequestUri);
-
+        _useFlareSolverr = true;
+        _workingProxy = null;
+        }
         try
         {
             var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), "ficbook", ct);
