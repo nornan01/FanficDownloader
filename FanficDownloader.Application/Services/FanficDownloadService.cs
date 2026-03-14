@@ -5,6 +5,8 @@ using FanficDownloader.Core.Formatting;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using FanficDownloader.Application.Security;
+using FanficDownloader.Core.Utils;
+using FanficDownloader.Core.Services;
 
 namespace FanficDownloader.Application.Services;
 
@@ -16,17 +18,22 @@ public class FanficDownloadService
     private readonly HttpClient _http;
 
     private readonly ILogger<FanficDownloadService> _logger;
-
+    private readonly FanficCacheService _cache;
+    private readonly R2StorageService _storage;
     public FanficDownloadService(
         SourceManager sourceManager,
         FanficEpubFormatter epubFormatter,
         HttpClient http,
-        ILogger<FanficDownloadService> logger)
+        ILogger<FanficDownloadService> logger,
+        FanficCacheService cache,
+        R2StorageService storage)
     {
         _sourceManager = sourceManager;
         _epubFormatter = epubFormatter;
         _http = http;
         _logger = logger;
+        _cache = cache;
+        _storage = storage;
     }
 
     // 1. Получить только информацию (БЕЗ глав)
@@ -120,6 +127,23 @@ public class FanficDownloadService
 
     public async Task<DownloadFileResult> BuildTxtAsync(string url, CancellationToken ct)
     {
+        var cached = await _cache.GetAsync(url, FanficFormats.Txt);
+
+        if (cached != null)
+        {
+            _logger.LogInformation("TXT cache hit for {Url}", url);
+
+            using var stream = new MemoryStream();
+
+            await _storage.DownloadFileAsync(cached.ObjectKey, stream);
+
+            return new DownloadFileResult
+            {
+                Bytes = stream.ToArray(),
+                ContentType = "text/plain",
+                FileName = FileNameHelper.BuildSafeFileName(cached.Title, "txt")
+            };
+        }
         _logger.LogInformation("Starting TXT build for {Url}", url);
         var (fanfic, tempFiles) = await DownloadFullAsync(url, ct);
 
@@ -129,11 +153,27 @@ public class FanficDownloadService
             var text = formatter.ToTxt(fanfic);
             var bytes = Encoding.UTF8.GetBytes(text);
             _logger.LogInformation("TXT build completed for {Url}", url);
+            var objectKey = _storage.BuildObjectKey(url, FanficFormats.Txt, fanfic.Title);
+
+            using var uploadStream = new MemoryStream(bytes);
+
+            await _storage.UploadFileAsync(
+                objectKey,
+                uploadStream,
+                "text/plain"
+            );
+
+            await _cache.SaveAsync(
+                url,
+                fanfic.Title,
+                objectKey,
+                FanficFormats.Txt
+            );
             return new DownloadFileResult
             {
                 Bytes = bytes,
                 ContentType = "text/plain",
-                FileName = BuildSafeFileName(fanfic.Title, "txt")
+                FileName = FileNameHelper.BuildSafeFileName(fanfic.Title, "txt")
             };
         }
         finally
@@ -148,6 +188,23 @@ public class FanficDownloadService
 
     public async Task<DownloadFileResult> BuildEpubAsync(string url, CancellationToken ct)
     {
+        var cached = await _cache.GetAsync(url, FanficFormats.Epub);
+
+        if (cached != null)
+        {
+            _logger.LogInformation("EPUB cache hit for {Url}", url);
+
+            using var stream = new MemoryStream();
+
+            await _storage.DownloadFileAsync(cached.ObjectKey, stream);
+
+            return new DownloadFileResult
+            {
+                Bytes = stream.ToArray(),
+                ContentType = "application/epub+zip",
+                FileName = FileNameHelper.BuildSafeFileName(cached.Title, "epub")
+            };
+        }
         _logger.LogInformation("Starting EPUB build for {Url}", url);
         var ficHub = await TryGetFicHubEpubAsync(url, ct);
 
@@ -159,7 +216,7 @@ public class FanficDownloadService
             {
                 Bytes = ficHub.Value.Bytes,
                 ContentType = "application/epub+zip",
-                FileName = BuildSafeFileName(ficHub.Value.Title, "epub")
+                FileName = FileNameHelper.BuildSafeFileName(ficHub.Value.Title, "epub")
             };
         }
 
@@ -173,11 +230,28 @@ public class FanficDownloadService
 
             var bytes = await File.ReadAllBytesAsync(path, ct);
             _logger.LogInformation("EPUB build completed for {Url}", url);
+            var objectKey = _storage.BuildObjectKey(url, FanficFormats.Epub, fanfic.Title);
+
+            using var uploadStream = new MemoryStream(bytes);
+
+            await _storage.UploadFileAsync(
+                objectKey,
+                uploadStream,
+                "application/epub+zip"
+            );
+
+            await _cache.SaveAsync(
+                url,
+                fanfic.Title,
+                objectKey,
+                FanficFormats.Epub
+            );
+
             return new DownloadFileResult
             {
                 Bytes = bytes,
                 ContentType = "application/epub+zip",
-                FileName = BuildSafeFileName(fanfic.Title, "epub")
+                FileName = FileNameHelper.BuildSafeFileName(fanfic.Title, "epub")
             };
         }
         finally
@@ -195,19 +269,6 @@ public class FanficDownloadService
         }
     }
 
-    private string BuildSafeFileName(string title, string ext)
-    {   
-        _logger.LogInformation("Building safe filename for {Title}", title);
-        var invalidChars = Path.GetInvalidFileNameChars();
-
-        var safeTitle = new string(
-            title.Where(ch => !invalidChars.Contains(ch)).ToArray()
-        );
-
-        safeTitle = safeTitle.Replace(" ", "_");
-
-        return $"{safeTitle}.{ext}";
-    }
     private async Task<(byte[] Bytes, string Title)?> TryGetFicHubEpubAsync(string url, CancellationToken ct)
     {
         try

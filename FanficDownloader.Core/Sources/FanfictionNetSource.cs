@@ -31,7 +31,7 @@ public class FanfictionNetSource : IFanficSource
     {
 
         _logger.LogInformation("Fetching fanfic info from fanfiction.net for {Url}", url);
-        var html = await _flare.GetAsync(url, ct);
+        var html = await _flare.GetAsync(url, "fanfiction", ct);
         var fanfic = _parser.Parse(html, url);
         fanfic.SourceUrl = url;
         _logger.LogInformation("Parsed fanfic info for {Url}. Chapters: {ChapterCount}", url, fanfic.Chapters.Count);
@@ -56,7 +56,7 @@ public class FanfictionNetSource : IFanficSource
 
                 _logger.LogDebug("Fetching chapter {ChapterNumber} from {ChapterUrl}",
                     chapter.Number, chapter.Url);
-                var html = await _flare.GetAsync(chapter.Url, ct);
+                var html = await _flare.GetAsync(chapter.Url, "fanfiction", ct);
                 chapter.Text = _parser.ParseChapterText(html);
                 result.LoadedChapters++;
                 await Task.Delay(Random.Shared.Next(1200, 2500), ct);

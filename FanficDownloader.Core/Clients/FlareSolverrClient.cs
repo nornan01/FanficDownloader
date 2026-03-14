@@ -9,22 +9,24 @@ public class FlareSolverrClient
 {
     private readonly HttpClient _http;
     private readonly ILogger<FlareSolverrClient> _logger;
-
+   
     public FlareSolverrClient(HttpClient http, ILogger<FlareSolverrClient> logger)
     {
         _http = http;
         _logger = logger;
     }
 
-    public async Task<string> GetAsync(string url, CancellationToken ct)
+    public async Task<string> GetAsync(string url, string sessionId, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        await EnsureSessionAsync(sessionId, ct);
         _logger.LogInformation("FlareSolverr request started for {Url}", url);
         var payload = new
         {
             cmd = "request.get",
             url = url,
-            maxTimeout = 60000
+            maxTimeout = 60000,
+            session = sessionId
         };
 
         var json = JsonSerializer.Serialize(payload);
@@ -32,7 +34,7 @@ public class FlareSolverrClient
         try
         {
             var resp = await _http.PostAsync(
-                "/v1", // БАЗОВЫЙ АДРЕС зададим в Program.cs
+                "/v1", 
                 new StringContent(json, Encoding.UTF8, "application/json"),
                 ct
             );
@@ -95,5 +97,23 @@ public class FlareSolverrClient
 
             throw;
         }
+    }
+    public async Task EnsureSessionAsync(string sessionId, CancellationToken ct)
+    {
+        var payload = new
+        {
+            cmd = "sessions.create",
+            session = sessionId
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+
+        await _http.PostAsync(
+            "/v1",
+            new StringContent(json, Encoding.UTF8, "application/json"),
+            ct
+        );
+
+        _logger.LogInformation("FlareSolverr session ensured: {Session}", sessionId);
     }
 }

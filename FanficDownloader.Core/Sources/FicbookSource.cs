@@ -230,8 +230,7 @@ public class FicbookSource : IFanficSource
 
         try
         {
-            var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), ct);
-
+            var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), "ficbook", ct);
             if (string.IsNullOrWhiteSpace(html))
             {
                 _logger.LogError("FlareSolverr returned empty HTML for {Url}", request.RequestUri);

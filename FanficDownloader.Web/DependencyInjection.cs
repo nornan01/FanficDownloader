@@ -57,7 +57,9 @@ public static class DependencyInjection
         //services
         var proxies = configuration.GetSection("Proxies").Get<List<string>>() ?? new();
         services.AddSingleton(new ProxyService(proxies));
-
+        services.AddSingleton<R2StorageService>();
+        services.AddScoped<FanficCacheService>();
+        
         services.AddHttpClient<IFanficSource, SnapetalesSource>();
         services.AddTransient<IFanficSource, FanfictionNetSource>();
         services.AddHttpClient<IFanficSource, WalkingThePlankSource>();
