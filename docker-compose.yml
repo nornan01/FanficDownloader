@@ -11,9 +11,12 @@ services:
 
     ports:
       - "8080:8080"
+    volumes:
+      - ./FanficDownloader.Web/appsettings.json:/app/appsettings.json
 
     depends_on:
       - flaresolverr
+      - postgres
 
     restart: unless-stopped
 
@@ -26,4 +29,21 @@ services:
       - "8191:8191"
 
     restart: unless-stopped
-    
+
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+
+    environment:
+      POSTGRES_DB: fanficdownloader
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: REMOVED_PASSWORD
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    restart: unless-stopped
+
+volumes:
+    postgres_data:
