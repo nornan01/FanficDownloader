@@ -24,11 +24,8 @@ services:
   flaresolverr:
     image: flaresolverr/flaresolverr
     container_name: flaresolverr
-
-    ports:
-      - "8191:8191"
-
     restart: unless-stopped
+    shm_size: "512mb"
 
 
   postgres:
@@ -39,7 +36,7 @@ services:
       POSTGRES_DB: fanficdownloader
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: REMOVED_PASSWORD
-
+    
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

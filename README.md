@@ -27,7 +27,11 @@ It is designed as a small production-ready service with a queue-based architectu
 - Queue-based download system
 - Configurable concurrency
 - Source-specific parsers
+- Proxy rotation for ficbook.net requests
 - Optional Cloudflare bypass via FlareSolverr
+- PostgreSQL-backed cache metadata storage
+- R2 object storage for cached TXT/EPUB files
+- Cache-first download flow (reuse previously generated files)
 - Docker deployment
 - Nginx reverse proxy
 - HTTPS via Let's Encrypt
@@ -39,7 +43,7 @@ It is designed as a small production-ready service with a queue-based architectu
 
 Currently supported fanfiction sites:
 
-- ficbook.net  
+- ficbook.net *(proxy-first, with FlareSolverr fallback)*  
 - snapetales.com  
 - fanfiction.net *(via FlareSolverr)*  
 - walkingtheplank.org  
@@ -109,11 +113,13 @@ FanficDownloader.Web
     Pages
         Index.cshtml
     Program.cs
+    DependencyInjection.cs
     wwwroot
 
 FanficDownloader.Application
     Services
         FanficDownloadService
+        FanficCacheService
         ImageDownloadService
     Configuration
         DownloadSettings
@@ -140,11 +146,16 @@ FanficDownloader.Core
         FanficTxtFormatter
     Clients
         FlareSolverrClient
+    Services
+        R2StorageService
+        ProxyService
+        ProxyState
     Models
         Fanfic
         Chapter
         DownloadResult
         ImageInfo
+        FanficCacheEntry
 
 FanficDownloader.Bot
     Services
@@ -217,7 +228,7 @@ http://localhost:5000
 
 ## 4. Run FlareSolverr (optional)
 
-Fanfiction.net is protected by Cloudflare.
+Cloudflare-protected sources use FlareSolverr (fanfiction.net and ficbook.net fallback path).
 
 Start FlareSolverr and ensure the URL matches the configuration.
 
@@ -287,6 +298,53 @@ Download:MaxConcurrentDownloads
 
 ---
 
+# Cache system (PostgreSQL + R2)
+
+The service uses a cache layer to avoid rebuilding the same files repeatedly.
+
+How it works:
+
+1. On TXT/EPUB request, the service checks PostgreSQL table `fanfic_cache` by:
+   - source URL
+   - output format (`txt` or `epub`)
+2. If a cache record exists, the file is downloaded from object storage (R2) and returned immediately.
+3. If no cache record exists, the fanfic is downloaded and generated normally.
+4. The generated file is uploaded to R2, and metadata is saved to PostgreSQL.
+
+Cached metadata includes:
+
+- `url`
+- `title`
+- `object_key`
+- `created_at`
+- `format`
+
+This approach reduces repeated parsing/formatting work and improves response time for repeated downloads.
+
+---
+
+# PostgreSQL
+
+PostgreSQL is used for cache metadata persistence (`fanfic_cache` table).
+
+In Docker Compose, PostgreSQL is started as:
+
+- service: `postgres`
+- image: `postgres:16`
+- database: `fanficdownloader`
+
+Connection string is configured in `appsettings.json`:
+
+```json
+"ConnectionStrings": {
+  "Postgres": "Host=localhost;Port=5432;Database=fanficdownloader;Username=postgres;Password=..."
+}
+```
+
+When running in containers, ensure the host and credentials match your compose/network setup.
+
+---
+
 # Telegram bot
 
 The Telegram bot runs as a background service inside the web host.
@@ -300,9 +358,11 @@ If `TG_BOT_TOKEN` is set, the bot automatically starts when the application laun
 Typical production deployment:
 
 1. Docker container running the application  
-2. Nginx reverse proxy  
-3. HTTPS via Let's Encrypt  
-4. Optional Cloudflare DNS  
+2. PostgreSQL container for cache metadata  
+3. (Optional) FlareSolverr container for Cloudflare-protected sources  
+4. Nginx reverse proxy  
+5. HTTPS via Let's Encrypt  
+6. Optional Cloudflare DNS  
 
 Deployment workflow:
 
@@ -370,7 +430,6 @@ Frontend improvements, UI redesigns, and UX enhancements would be greatly apprec
 
 Possible future features:
 
-- caching downloaded fanfics
 - rate limiting
 - download size limits
 - monitoring (CPU / memory)
