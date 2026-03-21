@@ -17,7 +17,7 @@
 <body>
 
 
-    <div class="container d-flex flex-column align-items-center pt-5">
+    <div class="container pt-5 flex-grow-1">
 
         <div class="text-center mb-5">
             <h1 class="fw-bold site-title">
@@ -30,7 +30,7 @@
         </div>
 
         <!-- INPUT CARD -->
-        <div class="card shadow-lg p-4">
+        <div class="input-wrapper">
 
 
             <div class="input-group input-group-lg">
@@ -40,14 +40,14 @@
                 <input id="urlInput"   class="form-control border-start-0"           type="text"           placeholder="Paste fanfic URL">
             </div>
 
-            <div class="d-flex justify-content-center gap-3 mt-3">
+            <div class="d-flex justify-content-center gap-3 mt-3 buttons-row">
 
-                <button id="btnEpub" class="btn btn-primary btn-lg flex-fill shadow-sm"      
+                <button id="btnEpub" class="btn btn-primary btn-lg shadow-sm"      
                         onclick="triggerDownload('epub')"                        disabled>
                     Download EPUB
                 </button>
 
-                <button id="btnTxt" class="btn btn-outline-primary btn-lg flex-fill shadow-sm"         
+                <button id="btnTxt" class="btn btn-outline-primary btn-lg shadow-sm"         
                         onclick="triggerDownload('txt')"                        disabled>
                     Download TXT
                 </button>
@@ -62,9 +62,6 @@
                 </div>
             </div>
         </div>
-
-
-
 
         <!-- PREVIEW CARD -->
         <div id="fanficCard" class="card preview-card mt-4 shadow">
@@ -83,38 +80,62 @@
             </div>
         </div>
 
-        <div class="footer text-center mt-5">
+        <div class="mt-5 info-grid">
 
-            Let's preserve our favourite stories in a timeless format <br>
-
-            Made with ❤️ by
-            <br>
-            <a href="https://t.me/nornan" target="_blank"     class="text-decoration-none ms-1 me-2">
-                <i class="bi bi-telegram"></i> Telegram
-            </a>
-            
-            <a href="https://github.com/nornan01" target="_blank"   class="text-decoration-none ms-2">
-                <i class="bi bi-github"></i> GitHub
-            </a>
-
-            <div class="mt-2">
-                For fast downloading in Telegram:
-                <a href="https://t.me/fanfic_downloader_bot" target="_blank"      class="text-decoration-none">
-                    @@fanfic_downloader_bot
-                </a>
+            <div class="info-card">
+                <i class="bi bi-book"></i>
+                <h6>What is this?</h6>
+                <p>Save fanfics as EPUB or TXT for offline reading.</p>
             </div>
-            <div class="mt-2">
-                <a class="text-decoration-none"  href="https://t.me/nornan?text=FanficDownloader%20issue"
-                       target="_blank">
-                    Report a problem
-                </a>
+
+            <div class="info-card">
+                <i class="bi bi-lightning-charge"></i>
+                <h6>How it works</h6>
+                <p>Paste link → we collect chapters → get your file</p>
+            </div>
+
+            <div class="info-card">
+                <i class="bi bi-globe"></i>
+                <h6>Supported sites</h6>
+                <p>ficbook · fanfiction · snapetales · walkingtheplank</p>
+            </div>
+
+            <div class="info-card">
+                <i class="bi bi-clock"></i>
+                <h6>How long?</h6>
+                <p>1 chapter ≈ 2–5 sec •
+                    20 chapters ≈ 1–3 min</p>
             </div>
 
         </div>
+        
+    </div>
+    <div class="footer text-center mt-5 text-muted">
 
+        Let's preserve our favourite stories in a timeless format <br>
+
+        Made with ❤️ by
+        <a href="https://t.me/nornan" target="_blank" class="text-decoration-none ms-1 me-2">
+            <i class="bi bi-telegram"></i>Telegram
+        </a>
+
+        <a href="https://github.com/nornan01" target="_blank" class="text-decoration-none ms-2">
+            <i class="bi bi-github"></i>GitHub
+        </a>
+
+        <div>
+            For fast downloading in Telegram:
+            <a href="https://t.me/fanfic_downloader_bot" target="_blank" class="text-decoration-none">
+                @@fanfic_downloader_bot
+            </a>
+        </div>
+        <div class="mt-2">
+            <a class="text-decoration-none" href="https://t.me/nornan?text=FanficDownloader%20issue"                      target="_blank">
+                Report a problem
+            </a>
+        </div>
 
     </div>
-
     <script>
 
             var urlInput = document.getElementById("urlInput");

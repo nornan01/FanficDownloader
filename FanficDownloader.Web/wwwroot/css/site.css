@@ -1,22 +1,14 @@
 html {
     min-height: 100%;
-    background: linear-gradient(180deg, #fdfcf0, #fff1cd);
+    background: linear-gradient(180deg, #fcf2d9, #ffe8ad);
 }
 
 body {
     min-height: 100%;
     background: transparent;
+    display: flex;
+    flex-direction: column;
 }
-
-/* =========================
-   LAYOUT
-========================= */
-
-
-
-/* =========================
-   TITLE
-========================= */
 
 .site-title {
     color: #6b2d5c;
@@ -24,6 +16,23 @@ body {
     font-weight: 700;
 }
 
+.input-wrapper {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+    transition: all 0.25s ease;
+    
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.25s ease;
+        
+}
+.input-wrapper:hover{
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
 
 /* =========================
    BUTTONS (Bootstrap override via variables)
@@ -61,7 +70,16 @@ body {
     --bs-btn-focus-shadow-rgb: 107, 45, 92;
 }
 
+@media (max-width: 576px) {
+    .buttons-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
 
+    .buttons-row .btn {
+        width: 100%;
+    }
+}
 /* =========================
    INPUT FOCUS
 ========================= */
@@ -90,7 +108,7 @@ body {
     max-width: 520px;
     width: 100%;
     border-radius: 16px;
-
+    margin: 20px auto;
     opacity: 0;
     display: none;
     transition: opacity .3s ease;
@@ -138,4 +156,63 @@ footer,
     font-weight: 700;
     font-size: 1.6rem;
 
+}
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    width: 100%;
+    max-width: 1000px;
+    margin: 40px auto 0;
+    margin: auto;
+}
+
+@media (max-width: 992px) {
+    .info-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 576px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+
+.info-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+
+    text-align: center;
+
+    transition: all 0.25s ease;
+}
+
+.info-card i {
+    font-size: 22px;
+    color: #6b2d5c;
+    margin-bottom: 10px;
+}
+
+.info-card h6 {
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.info-card p {
+    font-size: 14px;
+    color: #666;
+}
+
+.info-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.buttons-row {
+    flex-wrap: wrap;
 }
