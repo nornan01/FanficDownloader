@@ -21,7 +21,13 @@ public class FicbookParser
             Tags = ParseTags(doc),
             Description = ParseDescription(doc),
             Chapters = ParseChapters(doc),
-            CoverUrl = ParseCover(doc)
+            CoverUrl = ParseCover(doc),
+            Size = ParseSize(doc),
+            Rating = ParseRating(doc),
+            OtherTags = ParseOtherTags(doc),
+            Notes = ParseNotes(doc),
+            Dedication = ParseDedication(doc)
+
         };
     }
 
@@ -162,36 +168,6 @@ public class FicbookParser
         });
         return chapters;
     }
-    // the old one, it was too simple and lost formatting from time to time 
-    // public string ParseChapterText(string html)
-    // {
-    //     var doc = new HtmlDocument();
-    //     doc.LoadHtml(html);
-
-    //     var content = doc.DocumentNode.SelectSingleNode("//div[@id='content']");
-    //     if (content == null)
-    //         return "";
-
-    //     var text = HtmlEntity.DeEntitize(content.InnerText);
-
-    //     text = text.Replace("\r", "");
-
-    //     var paragraphs = Regex.Split(text, @"\n+");
-
-    //     var sb = new StringBuilder();
-
-    //     foreach (var p in paragraphs)
-    //     {
-    //         var clean = p.Trim();
-
-    //         if (string.IsNullOrWhiteSpace(clean))
-    //             continue;
-
-    //         sb.Append($"<p>{System.Net.WebUtility.HtmlEncode(clean)}</p>\n");
-    //     }
-
-    //     return sb.ToString();
-    // }
 
 
     public string ParseChapterText(string html)
@@ -290,5 +266,106 @@ public class FicbookParser
         return sb.ToString();
     }
 
+    //additional parsing for size, rating, notes, dedication 
+    private string? ParseSize(HtmlDocument doc)
+    {
+        var node = doc.DocumentNode
+            .SelectSingleNode("//div[@class='mb-10'][.//strong[text()='Размер:']]//div");
+
+        return HtmlEntity.DeEntitize(node?.InnerText ?? "").Trim();
+    }
+
+    private string? ParseRating(HtmlDocument doc)
+    {
+        var node = doc.DocumentNode
+            .SelectSingleNode("//div[contains(@class,'badge-rating')]//span[@class='badge-text']");
+
+        return HtmlEntity.DeEntitize(node?.InnerText ?? "").Trim();
+    }
+    private List<string> ParseOtherTags(HtmlDocument doc)
+    {
+        return doc.DocumentNode
+            .SelectNodes("//div[contains(@class,'description')]//div[@class='mb-10'][.//strong[text()='Другие метки:']]//a[contains(@class,'tag')]")?
+            .Select(x => x.InnerText.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList()
+            ?? new List<string>();
+    }
+    private string? ParseNotes(HtmlDocument doc)
+    {
+        var node = doc.DocumentNode
+            .SelectSingleNode("//div[@class='mb-10'][.//strong[text()='Примечания:']]//div");
+
+        return node?.InnerHtml?.Trim();
+    }
+    private string? ParseDedication(HtmlDocument doc)
+    {
+        var node = doc.DocumentNode
+            .SelectSingleNode("//div[@class='mb-10'][.//strong[text()='Посвящение:']]//div");
+
+        return node?.InnerHtml?.Trim();
+    }
+
+    public string? ParseChapterEndNotes(string html)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var node = doc.DocumentNode
+            .SelectSingleNode("//div[contains(@class,'part-comment-bottom')]//div[contains(@class,'text-preline')]");
+
+        if (node == null)
+            return null;
+
+        return FormatNotes(node.InnerHtml);
+    }
+    public string? ParseChapterStartNotes(string html)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var node = doc.DocumentNode
+            .SelectSingleNode("//div[contains(@class,'part-comment-top')]//div[contains(@class,'text-preline')]");
+
+        if (node == null)
+            return null;
+
+        return FormatNotes(node.InnerHtml);
+    }
+    private string FormatNotes(string html)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var sb = new StringBuilder();
+
+        foreach (var node in doc.DocumentNode.ChildNodes)
+        {
+            if (node.Name == "#text")
+            {
+                var text = HtmlEntity.DeEntitize(node.InnerText)
+                    .Replace("\r", "");
+
+                var lines = Regex.Split(text, @"\n+");
+
+                foreach (var line in lines)
+                {
+                    var clean = line.Trim();
+
+                    if (!string.IsNullOrWhiteSpace(clean))
+                        sb.Append($"<p>{System.Net.WebUtility.HtmlEncode(clean)}</p>\n");
+                }
+            }
+            else
+            {
+                var cleaned = CleanNode(node).Trim();
+
+                if (!string.IsNullOrWhiteSpace(cleaned))
+                    sb.Append($"<p>{cleaned}</p>\n");
+            }
+        }
+
+        return sb.ToString();
+    }
 
 }

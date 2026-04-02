@@ -35,7 +35,7 @@ services:
     environment:
       POSTGRES_DB: fanficdownloader
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: REMOVED_PASSWORD
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     
     volumes:
       - postgres_data:/var/lib/postgresql/data

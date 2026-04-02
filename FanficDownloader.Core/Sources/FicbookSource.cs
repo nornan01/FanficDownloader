@@ -91,6 +91,8 @@ public class FicbookSource : IFanficSource
                 var response = await SendWithFallbackAsync(request, ct);
                 var html = await response.Content.ReadAsStringAsync(ct);
                 chapter.Text = _parser.ParseChapterText(html);
+                chapter.EndNotes = _parser.ParseChapterEndNotes(html);
+                chapter.StartNotes = _parser.ParseChapterStartNotes(html);
                 result.LoadedChapters++;
 
                 await Task.Delay(Random.Shared.Next(1200, 2500), ct);

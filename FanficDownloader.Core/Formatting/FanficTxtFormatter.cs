@@ -23,11 +23,80 @@ public class FanficTxtFormatter
             sb.AppendLine(string.Join(", ", fanfic.Authors));
             sb.AppendLine();
         }
+        if (fanfic.Fandoms.Any())
+        {
+            sb.AppendLine("Fandoms:");
+            sb.AppendLine(string.Join(", ", fanfic.Fandoms));
+            sb.AppendLine();
+        }
+
+        // 🔹 Пейринги
+        if (fanfic.Pairings.Any())
+        {
+            sb.AppendLine("Pairings:");
+            sb.AppendLine(string.Join(", ", fanfic.Pairings));
+            sb.AppendLine();
+        }
+
+        // 🔹 Рейтинг
+        if (!string.IsNullOrWhiteSpace(fanfic.Rating))
+        {
+            sb.AppendLine("Rating:");
+            sb.AppendLine(fanfic.Rating);
+            sb.AppendLine();
+        }
+
+        // 🔹 Размер
+        if (!string.IsNullOrWhiteSpace(fanfic.Size))
+        {
+            sb.AppendLine("Size:");
+            sb.AppendLine(HtmlToPlainText(fanfic.Size));
+            sb.AppendLine();
+        }
+
+        // 🔹 Жанры
+        if (fanfic.Tags.Any())
+        {
+            sb.AppendLine("Genres:");
+            sb.AppendLine(string.Join(", ", fanfic.Tags));
+            sb.AppendLine();
+        }
+
+        // 🔹 Другие метки
+        if (fanfic.OtherTags.Any())
+        {
+            sb.AppendLine("Other Tags:");
+            sb.AppendLine(string.Join(", ", fanfic.OtherTags));
+            sb.AppendLine();
+        }
+
 
         if (!string.IsNullOrWhiteSpace(fanfic.Description))
         {
             sb.AppendLine("Description:");
             sb.AppendLine(fanfic.Description);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(fanfic.Notes))
+        {
+            sb.AppendLine("Notes:");
+            sb.AppendLine(HtmlToPlainText(fanfic.Notes));
+            sb.AppendLine();
+        }
+
+        // 🔹 Посвящение
+        if (!string.IsNullOrWhiteSpace(fanfic.Dedication))
+        {
+            sb.AppendLine("Dedication:");
+            sb.AppendLine(HtmlToPlainText(fanfic.Dedication));
+            sb.AppendLine();
+        }
+
+        // 🔹 Ссылка
+        if (!string.IsNullOrWhiteSpace(fanfic.SourceUrl))
+        {
+            sb.AppendLine("Source URL:");
+            sb.AppendLine(fanfic.SourceUrl);
             sb.AppendLine();
         }
 
@@ -36,8 +105,23 @@ public class FanficTxtFormatter
             sb.AppendLine(chapter.Title);
             sb.AppendLine(new string('-', chapter.Title.Length));
             sb.AppendLine();
+            if (!string.IsNullOrWhiteSpace(chapter.StartNotes))
+            {
+                sb.AppendLine("Author's notes:");
+                sb.AppendLine(HtmlToPlainText(chapter.StartNotes));
+                sb.AppendLine();
+                sb.AppendLine("***");
+                sb.AppendLine();
+            }
+
             sb.AppendLine(HtmlToPlainText(chapter.Text));
             sb.AppendLine();
+            if (!string.IsNullOrWhiteSpace(chapter.EndNotes))
+            {
+                sb.AppendLine("Author's notes:");
+                sb.AppendLine(HtmlToPlainText(chapter.EndNotes));
+                sb.AppendLine();
+            }
         }
         sb.AppendLine();
         sb.AppendLine("––––––––––––––––––––");
@@ -78,6 +162,8 @@ public class FanficTxtFormatter
 
         // HTML entities
         text = WebUtility.HtmlDecode(text);
+        text = Regex.Replace(text, @"[ \t]+", " ");
+        text = Regex.Replace(text, @"\n{3,}", "\n\n");
 
         return text.Trim();
     }

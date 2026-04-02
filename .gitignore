@@ -4,3 +4,4 @@ obj/
 .env
 .DS_Store
 appsettings*.json
+docker-compose.yml

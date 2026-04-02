@@ -86,11 +86,22 @@ try{
             <html xmlns="http://www.w3.org/1999/xhtml">
             <body>
             <h1>{XmlEscape(fanfic.Title)}</h1>
-            <p><b>Авторы:</b> {XmlEscape(string.Join(", ", fanfic.Authors))}</p>
-            <p><b>Фэндомы:</b> {XmlEscape(string.Join(", ", fanfic.Fandoms))}</p>
-            <p><b>Пейринги:</b> {XmlEscape(string.Join(", ", fanfic.Pairings))}</p>
-            <p><b>Теги:</b> {XmlEscape(string.Join(", ", fanfic.Tags))}</p>
-            <p><b>Описание:</b> {XmlEscape(fanfic.Description)}</p>
+            {LineList("Авторы", fanfic.Authors)}
+            {LineList("Фэндомы", fanfic.Fandoms)}
+            {LineList("Пейринги", fanfic.Pairings)}
+
+            {Line("Рейтинг", fanfic.Rating)}
+            {Line("Размер", fanfic.Size)}
+
+            {LineList("Жанры", fanfic.Tags)}
+            {LineList("Другие метки", fanfic.OtherTags)}
+
+            {Line("Описание", fanfic.Description)}
+
+            {LineRaw("Примечания", fanfic.Notes)}
+            {LineRaw("Посвящение", fanfic.Dedication)}
+
+            {Line("Ссылка", fanfic.SourceUrl)}
             </body>
             </html>
             """, Encoding.UTF8);
@@ -326,7 +337,16 @@ try{
             <html xmlns="http://www.w3.org/1999/xhtml">
             <body>
             <h2>{XmlEscape(chapter.Title)}</h2>
+            {(string.IsNullOrWhiteSpace(chapter.StartNotes) ? "" : $@"
+            <p><b>Примечания автора:</b></p>
+            {chapter.StartNotes}
+            <p>***</p>
+            ")}
             {MakeValidXhtml(chapter.Text)}
+            {(string.IsNullOrWhiteSpace(chapter.EndNotes) ? "" : $@"
+            <p><b>Примечания автора:</b></p>
+            {chapter.EndNotes}
+            ")}
             </body>
             </html>
             """;
@@ -358,6 +378,28 @@ try{
         return html;
     }
 
+    private string Line(string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "";
 
+        return $"<p><b>{label}:</b> {XmlEscape(value)}</p>";
+    }
+
+    private string LineRaw(string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "";
+
+        return $"<p><b>{label}:</b> {value}</p>";
+    }
+
+    private string LineList(string label, List<string> values)
+    {
+        if (values == null || values.Count == 0)
+            return "";
+
+        return $"<p><b>{label}:</b> {XmlEscape(string.Join(", ", values))}</p>";
+    }
 
 }
