@@ -72,9 +72,9 @@
                 <br>
                 <h5 id="ficTitle"></h5>
                 <p id="ficAuthor" class="text-muted"></p>
-                <p><strong>Fandom:</strong> <span id="ficFandoms"></span></p>
-                <p><strong>Pairings:</strong> <span id="ficPairings"></span></p>
-                <p><strong>Tags:</strong> <span id="ficTags"></span></p>
+                <p id="rowFandoms"><strong>Fandom:</strong> <span id="ficFandoms"></span></p>
+                <p id="rowPairings"><strong>Pairings:</strong> <span id="ficPairings"></span></p>
+                <p id="rowTags"><strong>Tags:</strong> <span id="ficTags"></span></p>
                 <p id="ficDescription" class="text-muted small"></p>
 
             </div>
@@ -165,14 +165,32 @@
                 document.getElementById("ficAuthor").innerText =
                     fic.authors?.join(", ") ?? "Unknown author";
 
-                document.getElementById("ficFandoms").innerText =
-                    fic.fandoms?.join(", ") ?? "-";
+                    var fandomRow = document.getElementById("rowFandoms");
 
-                document.getElementById("ficPairings").innerText =
-                    fic.pairings?.join(", ") ?? "-";
+                    if (fic.fandoms && fic.fandoms.length > 0) {
+                        fandomRow.style.display = "block";
+                        document.getElementById("ficFandoms").innerText = fic.fandoms.join(", ");
+                    } else {
+                        fandomRow.style.display = "none";
+                    }
 
-                document.getElementById("ficTags").innerText =
-                    fic.tags?.join(", ") ?? "-";
+                    var pairingsRow = document.getElementById("rowPairings");
+
+                    if (fic.pairings && fic.pairings.length > 0) {
+                        pairingsRow.style.display = "block";
+                        document.getElementById("ficPairings").innerText = fic.pairings.join(", ");
+                    } else {
+                        pairingsRow.style.display = "none";
+                    }
+
+                    var tagsRow = document.getElementById("rowTags");
+
+                    if (fic.tags && fic.tags.length > 0) {
+                        tagsRow.style.display = "block";
+                        document.getElementById("ficTags").innerText = fic.tags.join(", ");
+                    } else {
+                        tagsRow.style.display = "none";
+                    }
 
                 document.getElementById("ficDescription").innerText =
                     fic.description ?? "";

@@ -3,6 +3,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices.Marshalling;
+using FanficDownloader.Core.Utils;
 
 namespace FanficDownloader.Bot.Services;
 
@@ -32,16 +33,20 @@ public class FanficService
 
         using var stream = new MemoryStream(file.Bytes);
 
-        await bot.SendDocument(
+        var safeName = FileNameHelper.BuildHttpSafeFileName(
+        Path.GetFileNameWithoutExtension(file.FileName),
+        "txt"
+        );
+            await bot.SendDocument(
             chatId: chatId,
-            document: new InputFileStream(stream, file.FileName),
+            document: new InputFileStream(stream, safeName),
             caption: "📘 Готово!",
             cancellationToken: ct
         );
             _logger.LogInformation(
                     "TXT sent successfully. ChatId={ChatId}, File={File}, Size={Size}",
                     chatId,
-                    file.FileName,
+                    safeName,
                     file.Bytes.Length);
         }catch(Exception ex)
         {
@@ -63,10 +68,13 @@ public class FanficService
         var file = await _downloadService.BuildEpubAsync(url, ct);
 
         using var stream = new MemoryStream(file.Bytes);
-
-        await bot.SendDocument(
+        var safeName = FileNameHelper.BuildHttpSafeFileName(
+        Path.GetFileNameWithoutExtension(file.FileName),
+        "epub"
+        ); 
+            await bot.SendDocument(
             chatId: chatId,
-            document: new InputFileStream(stream, file.FileName),
+            document: new InputFileStream(stream, safeName),
             caption: "📘 Готово!",
             cancellationToken: ct
         );
@@ -74,7 +82,7 @@ public class FanficService
         _logger.LogInformation(
                     "EPUB sent successfully. ChatId={ChatId}, File={File}, Size={Size}",
                     chatId,
-                    file.FileName,
+                    safeName,
                     file.Bytes.Length);
         }catch(Exception ex)
         {

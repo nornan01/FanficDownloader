@@ -20,13 +20,14 @@ public class FanficDownloadService
     private readonly ILogger<FanficDownloadService> _logger;
     private readonly FanficCacheService _cache;
     private readonly R2StorageService _storage;
+    private readonly ProxyHttpClientFactory _proxyFactory;
     public FanficDownloadService(
         SourceManager sourceManager,
         FanficEpubFormatter epubFormatter,
         HttpClient http,
         ILogger<FanficDownloadService> logger,
         FanficCacheService cache,
-        R2StorageService storage)
+        R2StorageService storage, ProxyHttpClientFactory proxyFactory)
     {
         _sourceManager = sourceManager;
         _epubFormatter = epubFormatter;
@@ -34,12 +35,37 @@ public class FanficDownloadService
         _logger = logger;
         _cache = cache;
         _storage = storage;
+        _proxyFactory = proxyFactory;
     }
 
     // 1. Получить только информацию (БЕЗ глав)
     public async Task<Fanfic> GetInfoAsync(string url, CancellationToken ct)
     {
         _logger.LogInformation("Starting info fetch for {Url}", url);
+        if (url.Contains("fanfiction.net"))
+        {
+            var ficHub = await TryGetFicHubEpubAsync(url, ct);
+
+            if (ficHub != null)
+            {
+                _logger.LogInformation("FicHub used for info fetch {Url}", url);
+
+                return new Fanfic
+                {
+                    Title = ficHub.Title,
+
+                    Authors = string.IsNullOrEmpty(ficHub.Author)
+                    ? new List<string>()
+                    : new List<string> { ficHub.Author },
+
+                    Description = ficHub.Description,
+
+                    SourceUrl = url,
+
+                    Chapters = new List<Chapter>()
+                };
+            }
+        }
         UrlValidator.Validate(url);
         var source = _sourceManager.GetSource(url);
         var fanfic = await source.GetFanficAsync(url, ct);
@@ -206,18 +232,22 @@ public class FanficDownloadService
             };
         }
         _logger.LogInformation("Starting EPUB build for {Url}", url);
-        var ficHub = await TryGetFicHubEpubAsync(url, ct);
 
-        if (ficHub != null)
+        if (url.Contains("fanfiction.net"))
         {
-            _logger.LogInformation("FicHub returned ready EPUB for {Url}", url);
+            var ficHub = await TryGetFicHubEpubAsync(url, ct);
 
-            return new DownloadFileResult
+            if (ficHub != null)
             {
-                Bytes = ficHub.Value.Bytes,
-                ContentType = "application/epub+zip",
-                FileName = FileNameHelper.BuildSafeFileName(ficHub.Value.Title, "epub")
-            };
+                _logger.LogInformation("FicHub used for fanfiction.net {Url}", url);
+
+                return new DownloadFileResult
+                {
+                    Bytes = ficHub.Bytes,
+                    ContentType = "application/epub+zip",
+                    FileName = FileNameHelper.BuildSafeFileName(ficHub.Title, "epub")
+                };
+            }
         }
 
         var (fanfic, tempFiles) = await DownloadFullAsync(url, ct);
@@ -269,14 +299,15 @@ public class FanficDownloadService
         }
     }
 
-    private async Task<(byte[] Bytes, string Title)?> TryGetFicHubEpubAsync(string url, CancellationToken ct)
+    private async Task<FicHubResult?> TryGetFicHubEpubAsync(string url, CancellationToken ct)
     {
         try
         {
+            var client = _proxyFactory.CreateClient();
             var encoded = Uri.EscapeDataString(url);
             var api = $"https://fichub.net/api/v0/epub?q={encoded}";
 
-            var json = await _http.GetStringAsync(api, ct);
+            var json = await client.GetStringAsync(api, ct);
 
             using var doc = System.Text.Json.JsonDocument.Parse(json);
 
@@ -290,19 +321,31 @@ public class FanficDownloadService
             if (string.IsNullOrEmpty(path))
                 return null;
 
-            var title = doc.RootElement
-                       .GetProperty("meta")
-                       .GetProperty("title")
-                       .GetString();
+            var meta = doc.RootElement.GetProperty("meta");
+
+            var title = meta.GetProperty("title").GetString();
+            var author = meta.GetProperty("author").GetString();
+            var chapters = meta.GetProperty("chapters").GetInt32();
+            var descriptionRaw = meta.GetProperty("description").GetString();
+
+            var description = System.Text.RegularExpressions.Regex
+                .Replace(descriptionRaw ?? "", "<.*?>", "");
 
             if (string.IsNullOrEmpty(title))
                 title = "fanfic";
 
             var fullUrl = "https://fichub.net" + path;
 
-            var bytes = await _http.GetByteArrayAsync(fullUrl, ct);
+            var bytes = await client.GetByteArrayAsync(fullUrl, ct);
 
-            return (bytes, title);
+            return new FicHubResult
+            {
+                Bytes = bytes,
+                Title = title,
+                Author = author ?? "",
+                Chapters = chapters,
+                Description = description ?? ""
+            };
         }
         catch
         {

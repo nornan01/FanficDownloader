@@ -4,20 +4,41 @@ public class FanficTelegramFormatter
 {
     public string FormatInfoMessage(Fanfic fanfic)
     {
-        return 
-                        $"""
-                        📖 Title: {fanfic.Title}
+        var sb = new System.Text.StringBuilder();
 
-                        ✍️ Authors: {string.Join(", ", fanfic.Authors)}
+        sb.AppendLine($"📖 Title: {fanfic.Title}");
+        sb.AppendLine();
 
-                        📚 Fandom: {string.Join(", ", fanfic.Fandoms)}
-                        
-                        ❤️ Pairings: {string.Join(", ", fanfic.Pairings)}
-                        
-                        🏷 Tags: {string.Join(", ", fanfic.Tags)}
+        if (fanfic.Authors.Any())
+        {
+            sb.AppendLine($"✍️ Authors: {string.Join(", ", fanfic.Authors)}");
+            sb.AppendLine();
+        }
 
-                        📝 Description:
-                        {fanfic.Description}
-                        """;
+        if (fanfic.Fandoms.Any())
+        {
+            sb.AppendLine($"📚 Fandom: {string.Join(", ", fanfic.Fandoms)}");
+            sb.AppendLine();
+        }
+
+        if (fanfic.Pairings.Any())
+        {
+            sb.AppendLine($"❤️ Pairings: {string.Join(", ", fanfic.Pairings)}");
+            sb.AppendLine();
+        }
+
+        if (fanfic.Tags.Any())
+        {
+            sb.AppendLine($"🏷 Tags: {string.Join(", ", fanfic.Tags)}");
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(fanfic.Description))
+        {
+            sb.AppendLine("📝 Description:");
+            sb.AppendLine(fanfic.Description);
+        }
+
+        return sb.ToString();
     }
-    }
+}

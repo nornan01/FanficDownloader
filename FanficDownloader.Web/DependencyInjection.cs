@@ -24,9 +24,10 @@ public static class DependencyInjection
         services.AddHostedService<TelegramBotBackgroundService>();
 
         // Core services
-        services.AddSingleton<SourceManager>();
+        services.AddTransient<SourceManager>();
         services.AddScoped<FanficDownloadService>();
         services.AddScoped<FanficService>();
+        services.AddSingleton<ProxyHttpClientFactory>();
 
         // Http services
         services.AddHttpClient<FanficEpubFormatter>();
