@@ -18,6 +18,8 @@ public class FlareSolverrClient
 
     public async Task<string> GetAsync(string url, string sessionId, CancellationToken ct)
     {
+        for(int attempt = 1; attempt <= 3; attempt++){
+            
         var sw = System.Diagnostics.Stopwatch.StartNew();
         await EnsureSessionAsync(sessionId, ct);
         _logger.LogInformation("FlareSolverr request started for {Url}", url);
@@ -62,7 +64,8 @@ public class FlareSolverrClient
                     "FlareSolverr unexpected JSON structure for {Url}",
                     url);
 
-                throw new InvalidOperationException("Invalid FlareSolverr response format");
+                _logger.LogError("Invalid FlareSolverr response format for {Url}", url);
+                return "";
             }
 
             var response = responseElement.GetString();
@@ -84,7 +87,7 @@ public class FlareSolverrClient
                 "FlareSolverr JSON parse error for {Url}",
                 url);
 
-            throw;
+            return "";
         }
         catch (Exception ex)
         {
@@ -94,9 +97,11 @@ public class FlareSolverrClient
                 ex,
                 "FlareSolverr request failed for {Url}",
                 url);
-
-            throw;
+            return "";
         }
+            
+        }
+        return "";
     }
     public async Task EnsureSessionAsync(string sessionId, CancellationToken ct)
     {
