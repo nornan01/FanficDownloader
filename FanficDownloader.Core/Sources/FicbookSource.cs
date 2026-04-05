@@ -113,11 +113,10 @@ public class FicbookSource : IFanficSource
     }
     private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, string? sessionId, CancellationToken ct)
     {
-        // CHANGE: убрали _useFlareSolverr, теперь локальный флаг
         bool proxyFailed = false;
         string? workingProxy = _workingProxy;
+        _logger.LogInformation("=== SendWithFallback START === Url={Url}", request.RequestUri);
 
-        // CHANGE: оставили локальную функцию (как ты хочешь)
         async Task<HttpResponseMessage?> TryProxy(string proxyUrl)
         {
             try
@@ -158,21 +157,30 @@ public class FicbookSource : IFanficSource
                     proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
 
                 var response = await proxyClient.SendAsync(proxyRequest, ct);
+                _logger.LogInformation("Proxy response: {StatusCode}", response.StatusCode);
 
-                if (response.IsSuccessStatusCode)
+
+                if (response.IsSuccessStatusCode){
+                    _logger.LogInformation("Proxy SUCCESS: {Proxy}", proxyUrl);
                     return response;
-
-                return null;
+                }
+                else
+                {
+                    _logger.LogWarning("Proxy FAILED (status): {Proxy}", proxyUrl);
+                    return null;
+                }
             }
-            catch
+            catch(Exception ex)
             {
+                _logger.LogWarning(ex, "Proxy EXCEPTION: {Proxy}", proxyUrl);
                 return null;
             }
         }
 
-        // CHANGE: пробуем cached proxy один раз
         if (!proxyFailed && workingProxy != null)
         {
+            _logger.LogInformation("Trying cached proxy: {Proxy}", workingProxy);
+
             var response = await TryProxy(workingProxy);
 
             if (response != null)
@@ -180,8 +188,7 @@ public class FicbookSource : IFanficSource
                 _proxyService.MarkSuccess(workingProxy);
                 return response;
             }
-
-            // CHANGE: если умер — больше не пробуем прокси в этом запросе
+            _logger.LogWarning("Cached proxy FAILED: {Proxy}", workingProxy);
             _proxyService.MarkFailed(workingProxy);
             _workingProxy = null;
             workingProxy = null;
@@ -193,7 +200,9 @@ public class FicbookSource : IFanficSource
         {
             for (int attempt = 1; attempt <= 3; attempt++)
             {
+                
                 string? proxyUrl = _proxyService.GetRandomProxy();
+                _logger.LogInformation("Proxy attempt {Attempt}, proxy={Proxy}", attempt, proxyUrl);
 
                 if (proxyUrl == null)
                     break;
@@ -202,27 +211,30 @@ public class FicbookSource : IFanficSource
 
                 if (response != null)
                 {
+                    _logger.LogInformation("Proxy attempt {Attempt} SUCCESS", attempt);
                     _workingProxy = proxyUrl;
                     _proxyService.MarkSuccess(proxyUrl);
                     return response;
                 }
-
+                _logger.LogWarning("Proxy attempt {Attempt} FAILED", attempt);
                 _proxyService.MarkFailed(proxyUrl);
             }
-
-            // CHANGE: после 3 фейлов — отключаем прокси для этого запроса
+            _logger.LogWarning("All proxy attempts FAILED → switching to FlareSolverr");
             proxyFailed = true; // 🔥 ВАЖНО
             _workingProxy = null;
         }
-
-        // CHANGE: всегда идём в FlareSolverr без _useFlareSolverr
         var actualSessionId = sessionId ?? Guid.NewGuid().ToString();
+
+        _logger.LogInformation("Using FlareSolverr. Session={SessionId}, Url={Url}", actualSessionId, request.RequestUri);
 
         var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), actualSessionId, ct);
 
-        if (string.IsNullOrWhiteSpace(html))
+        if (string.IsNullOrWhiteSpace(html)){
+            _logger.LogError("FlareSolverr returned EMPTY HTML for {Url}", request.RequestUri);
             throw new HttpRequestException($"FlareSolverr returned empty HTML for {request.RequestUri}");
-
+        }
+        _logger.LogInformation("FlareSolverr SUCCESS for {Url}", request.RequestUri);
+        
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html")
