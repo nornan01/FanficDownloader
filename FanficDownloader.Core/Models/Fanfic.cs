@@ -20,6 +20,7 @@ public class Fanfic
 
     public string? Notes { get; set; }
     public string? Dedication { get; set; }
+    public string? SessionId { get; set; }
 
 
 }

@@ -117,6 +117,11 @@ public class FanficDownloadService
 
     public async Task<(Fanfic fanfic, List<string> tempFiles)> DownloadFullAsync(string url, CancellationToken ct)
     {
+        var downloadId = Guid.NewGuid().ToString();
+
+        _logger.LogInformation(
+            "Download started. DownloadId={DownloadId}, Url={Url}",
+            downloadId, url);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _logger.LogInformation("Starting full download for {Url}", url);
         UrlValidator.Validate(url);
@@ -132,10 +137,13 @@ public class FanficDownloadService
 
             sw.Stop();
             _logger.LogInformation(
-                "Full download completed in {ElapsedMs} ms. Chapters={Count}, ImagesTemp={Images}",
+                "Full download completed in {ElapsedMs} ms. Chapters={Count}, ImagesTemp={Images}, DownloadId={DownloadId}, Url={Url}, Chapters={Count}",
                 sw.ElapsedMilliseconds,
                 fanfic.Chapters?.Count ?? 0,
-                tempFiles.Count
+                tempFiles.Count,
+                downloadId,
+                url,
+                fanfic.Chapters?.Count ?? 0
             );
 
             return (fanfic, tempFiles);
@@ -170,7 +178,13 @@ public class FanficDownloadService
                 FileName = FileNameHelper.BuildSafeFileName(cached.Title, "txt")
             };
         }
-        _logger.LogInformation("Starting TXT build for {Url}", url);
+        var downloadId = Guid.NewGuid().ToString();
+
+        _logger.LogInformation(
+            "TXT build started. DownloadId={DownloadId}, Url={Url}",
+            downloadId,
+            url
+        );
         var (fanfic, tempFiles) = await DownloadFullAsync(url, ct);
 
         try
@@ -194,6 +208,12 @@ public class FanficDownloadService
                 fanfic.Title,
                 objectKey,
                 FanficFormats.Txt
+            );
+            _logger.LogInformation(
+                "TXT build completed. DownloadId={DownloadId}, Url={Url}, Size={Size}",
+                downloadId,
+                url,
+                bytes.Length
             );
             return new DownloadFileResult
             {
@@ -240,6 +260,22 @@ public class FanficDownloadService
             if (ficHub != null)
             {
                 _logger.LogInformation("FicHub used for fanfiction.net {Url}", url);
+                var objectKey = _storage.BuildObjectKey(url, FanficFormats.Epub, ficHub.Title);
+
+                using var uploadStream = new MemoryStream(ficHub.Bytes);
+
+                await _storage.UploadFileAsync(
+                    objectKey,
+                    uploadStream,
+                    "application/epub+zip"
+                );
+
+                await _cache.SaveAsync(
+                    url,
+                    ficHub.Title,
+                    objectKey,
+                    FanficFormats.Epub
+                );
 
                 return new DownloadFileResult
                 {
@@ -301,6 +337,8 @@ public class FanficDownloadService
 
     private async Task<FicHubResult?> TryGetFicHubEpubAsync(string url, CancellationToken ct)
     {
+        for(int attempt = 1; attempt <= 3; attempt++)
+        {
         try
         {
             var client = _proxyFactory.CreateClient();
@@ -308,6 +346,7 @@ public class FanficDownloadService
             var api = $"https://fichub.net/api/v0/epub?q={encoded}";
 
             var json = await client.GetStringAsync(api, ct);
+            _logger.LogInformation("FicHub response: {Json}", json);
 
             using var doc = System.Text.Json.JsonDocument.Parse(json);
 
@@ -347,10 +386,12 @@ public class FanficDownloadService
                 Description = description ?? ""
             };
         }
-        catch
-        {
-            return null;
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "FicHub attempt {Attempt} failed for {Url}", attempt, url);
+            }
         }
+        return null;
     }
 
 }

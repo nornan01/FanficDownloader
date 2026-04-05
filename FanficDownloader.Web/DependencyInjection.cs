@@ -50,21 +50,27 @@ public static class DependencyInjection
             http.Timeout = TimeSpan.FromSeconds(120);
         });
 
-        // Sources
-        services.AddHttpClient<IFanficSource, FicbookSource>(client =>
+       
+        services.AddHttpClient<FicbookSource>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
+
+        services.AddTransient<IFanficSource>(sp => sp.GetRequiredService<FicbookSource>());
         //services
         var proxies = configuration.GetSection("Proxies").Get<List<string>>() ?? new();
         services.AddSingleton(new ProxyService(proxies));
         services.AddSingleton<R2StorageService>();
         services.AddScoped<FanficCacheService>();
-        
-        services.AddHttpClient<IFanficSource, SnapetalesSource>();
-        services.AddTransient<IFanficSource, FanfictionNetSource>();
-        services.AddHttpClient<IFanficSource, WalkingThePlankSource>();
 
+        services.AddTransient<SnapetalesSource>();
+        services.AddTransient<IFanficSource>(sp => sp.GetRequiredService<SnapetalesSource>());
+
+        services.AddTransient<FanfictionNetSource>();
+        services.AddTransient<IFanficSource>(sp => sp.GetRequiredService<FanfictionNetSource>());
+
+        services.AddTransient<WalkingThePlankSource>();
+        services.AddTransient<IFanficSource>(sp => sp.GetRequiredService<WalkingThePlankSource>());
         return services;
     }
 }

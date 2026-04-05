@@ -292,10 +292,13 @@ try{
             Encoding.UTF8
         );
 
-        // zip
-        epubPath = Path.Combine(Path.GetTempPath(), $"{safeTitle}.epub");
+            // zip
+            epubPath = Path.Combine(
+                Path.GetTempPath(),
+                $"{safeTitle}_{Guid.NewGuid()}.epub"
+            );
 
-        using (var fs = new FileStream(epubPath, FileMode.Create))
+            using (var fs = new FileStream(epubPath, FileMode.Create))
         using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
         {
             var mimeEntry = zip.CreateEntry("mimetype", CompressionLevel.NoCompression);

@@ -40,6 +40,7 @@ public class FicbookSource : IFanficSource
 
     public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
     {
+        var sessionId = Guid.NewGuid().ToString();
         _logger.LogInformation("Fetching fanfic info from ficbook.net for {Url}", url);
         var request = new HttpRequestMessage(HttpMethod.Get, url);
 
@@ -48,7 +49,7 @@ public class FicbookSource : IFanficSource
 
         request.Headers.AcceptLanguage.ParseAdd("ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
 
-        var response = await SendWithFallbackAsync(request, ct);
+        var response = await SendWithFallbackAsync(request, sessionId, ct);
 
         
         response.EnsureSuccessStatusCode();
@@ -56,6 +57,7 @@ public class FicbookSource : IFanficSource
         var html = await response.Content.ReadAsStringAsync(ct);
         var fanfic = _parser.Parse(html);
         fanfic.SourceUrl = url;
+        fanfic.SessionId = sessionId;
 
         if (fanfic.Chapters.Count == 1 && string.IsNullOrEmpty(fanfic.Chapters[0].Url))
         {
@@ -88,7 +90,7 @@ public class FicbookSource : IFanficSource
                 _logger.LogDebug("Fetching chapter {ChapterNumber} from {ChapterUrl}",
                     chapter.Number, chapter.Url);
                 var request = new HttpRequestMessage(HttpMethod.Get, chapter.Url);
-                var response = await SendWithFallbackAsync(request, ct);
+                var response = await SendWithFallbackAsync(request, fanfic.SessionId, ct);
                 var html = await response.Content.ReadAsStringAsync(ct);
                 chapter.Text = _parser.ParseChapterText(html);
                 chapter.EndNotes = _parser.ParseChapterEndNotes(html);
@@ -109,76 +111,17 @@ public class FicbookSource : IFanficSource
             fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
         return result;
     }
-    private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, CancellationToken ct)
+    private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, string? sessionId, CancellationToken ct)
     {
-        if (!_useFlareSolverr)
-        {
-            if (_workingProxy != null)
+        // CHANGE: убрали _useFlareSolverr, теперь локальный флаг
+        bool proxyFailed = false;
+        string? workingProxy = _workingProxy;
+
+        // CHANGE: оставили локальную функцию (как ты хочешь)
+        async Task<HttpResponseMessage?> TryProxy(string proxyUrl)
         {
             try
             {
-                var uri = new Uri(_workingProxy);
-
-                var proxy = new WebProxy($"{uri.Scheme}://{uri.Host}:{uri.Port}")
-                {
-                    Credentials = new NetworkCredential(
-                        uri.UserInfo.Split(':')[0],
-                        uri.UserInfo.Split(':')[1]
-                    )
-                };
-
-                var handler = new HttpClientHandler
-                {
-                    Proxy = proxy,
-                    UseProxy = true
-                };
-
-                using var proxyClient = new HttpClient(handler);
-                proxyClient.DefaultRequestHeaders.Accept.ParseAdd(
-                "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-
-                proxyClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
-                "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
-
-                proxyClient.DefaultRequestHeaders.UserAgent.ParseAdd(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
-                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                    "Chrome/120.0.0.0 Safari/537.36"
-                );
-
-                var proxyRequest = new HttpRequestMessage(HttpMethod.Get, request.RequestUri);
-                foreach (var header in request.Headers)
-                {
-                    proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
-                }
-                var proxyResponse = await proxyClient.SendAsync(proxyRequest, ct);
-
-                if (proxyResponse.IsSuccessStatusCode)
-                {
-                    _logger.LogInformation("Using cached working proxy");
-                    _proxyService.MarkSuccess(_workingProxy);
-                    return proxyResponse;
-                }
-            }
-            catch
-            {
-                if (_workingProxy != null)
-                    _proxyService.MarkFailed(_workingProxy);
-                _workingProxy = null;
-
-            }
-        }
-
-        for (int attempt = 1; attempt <= 3; attempt++)
-        {
-            string? proxyUrl = null;
-            try
-            {
-                proxyUrl = _proxyService.GetRandomProxy();
-                _logger.LogInformation("Trying proxy: {Proxy}", proxyUrl);
-                if (proxyUrl == null)
-                    break;
-
                 var uri = new Uri(proxyUrl);
 
                 var proxy = new WebProxy($"{uri.Scheme}://{uri.Host}:{uri.Port}")
@@ -196,11 +139,12 @@ public class FicbookSource : IFanficSource
                 };
 
                 using var proxyClient = new HttpClient(handler);
+
                 proxyClient.DefaultRequestHeaders.Accept.ParseAdd(
-                "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
 
                 proxyClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
-                "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+                    "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
 
                 proxyClient.DefaultRequestHeaders.UserAgent.ParseAdd(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
@@ -209,57 +153,79 @@ public class FicbookSource : IFanficSource
                 );
 
                 var proxyRequest = new HttpRequestMessage(HttpMethod.Get, request.RequestUri);
-                foreach (var header in request.Headers)
-                {
-                    proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
-                }
-                var proxyResponse = await proxyClient.SendAsync(proxyRequest, ct);
 
-                if (proxyResponse.IsSuccessStatusCode)
+                foreach (var header in request.Headers)
+                    proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+
+                var response = await proxyClient.SendAsync(proxyRequest, ct);
+
+                if (response.IsSuccessStatusCode)
+                    return response;
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // CHANGE: пробуем cached proxy один раз
+        if (!proxyFailed && workingProxy != null)
+        {
+            var response = await TryProxy(workingProxy);
+
+            if (response != null)
+            {
+                _proxyService.MarkSuccess(workingProxy);
+                return response;
+            }
+
+            // CHANGE: если умер — больше не пробуем прокси в этом запросе
+            _proxyService.MarkFailed(workingProxy);
+            _workingProxy = null;
+            workingProxy = null;
+            proxyFailed = true; // 🔥 ВАЖНО
+        }
+
+        // CHANGE: новые прокси только если ещё не было fail
+        if (!proxyFailed)
+        {
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                string? proxyUrl = _proxyService.GetRandomProxy();
+
+                if (proxyUrl == null)
+                    break;
+
+                var response = await TryProxy(proxyUrl);
+
+                if (response != null)
                 {
-                    _logger.LogInformation("Proxy attempt {Attempt} succeeded", attempt);
                     _workingProxy = proxyUrl;
                     _proxyService.MarkSuccess(proxyUrl);
-                    return proxyResponse;
+                    return response;
                 }
+
+                _proxyService.MarkFailed(proxyUrl);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Proxy attempt {Attempt} failed", attempt);
-                if (proxyUrl != null)
-                    _proxyService.MarkFailed(proxyUrl);
-            }
+
+            // CHANGE: после 3 фейлов — отключаем прокси для этого запроса
+            proxyFailed = true; // 🔥 ВАЖНО
+            _workingProxy = null;
         }
 
-        _logger.LogWarning("All proxy attempts failed. Trying FlareSolverr for {Url}", request.RequestUri);
-        _useFlareSolverr = true;
-        _workingProxy = null;
-        }
-        try
+        // CHANGE: всегда идём в FlareSolverr без _useFlareSolverr
+        var actualSessionId = sessionId ?? Guid.NewGuid().ToString();
+
+        var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), actualSessionId, ct);
+
+        if (string.IsNullOrWhiteSpace(html))
+            throw new HttpRequestException($"FlareSolverr returned empty HTML for {request.RequestUri}");
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
         {
-            var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), "ficbook", ct);
-            if (string.IsNullOrWhiteSpace(html))
-            {
-                _logger.LogError("FlareSolverr returned empty HTML for {Url}", request.RequestUri);
-                throw new InvalidOperationException("FlareSolverr returned empty HTML");
-            }
-
-            var response = new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html")
-            };
-
-            _logger.LogInformation("FlareSolverr fallback succeeded for {Url}", request.RequestUri);
-
-            return response;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "FlareSolverr fallback failed for {Url}", request.RequestUri);
-
-            throw new HttpRequestException(
-                $"All proxy attempts failed and FlareSolverr fallback failed for {request.RequestUri}",
-                ex);
-        }
+            Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html")
+        };
     }
 }

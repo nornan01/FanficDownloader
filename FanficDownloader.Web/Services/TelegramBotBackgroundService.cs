@@ -11,6 +11,7 @@ using FanficDownloader.Core.Formatting;
 using System.Collections.Concurrent;
 using FanficDownloader.Bot.Services;
 using FanficDownloader.Web.Services;
+using Npgsql;
 
 public class TelegramBotBackgroundService : BackgroundService
 {
@@ -153,6 +154,22 @@ public class TelegramBotBackgroundService : BackgroundService
 
         if (message.Text is null)
             return;
+
+        var connectionString = _config.GetConnectionString("Postgres");
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await using var cmd = new NpgsqlCommand(@"
+            INSERT INTO bot_users (user_id, first_seen, last_seen)
+            VALUES (@userId, NOW(), NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET last_seen = NOW();
+        ", connection);
+
+        cmd.Parameters.AddWithValue("userId", message.From!.Id);
+
+        await cmd.ExecuteNonQueryAsync();
 
         var chatIdMessage = message.Chat.Id;
 
