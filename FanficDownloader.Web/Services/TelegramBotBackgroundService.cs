@@ -67,18 +67,7 @@ public class TelegramBotBackgroundService : BackgroundService
         Update update,
         CancellationToken cancellationToken)
     {
-        if (update.Message is { } msg)
-        {
-            var chatId = msg.Chat.Id;
-
-            await botClient.SendMessage(
-                chatId,
-                "⚠️ Бот сейчас на техническом обслуживании, могут быть проблемы 🙏",
-                cancellationToken: cancellationToken
-            );
-
-            return;
-        }
+        
 
         // ================= CALLBACK =================
         if (update.CallbackQuery is { } callback)
