@@ -48,7 +48,50 @@ public class DownloadQueueService : BackgroundService
 
         await foreach (var job in _queue.Reader.ReadAllAsync(stoppingToken))
         {
-            var task = ProcessJobAsync(job, stoppingToken);
+            await _semaphore.WaitAsync(stoppingToken);
+
+            var task = Task.Run(async () =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                try
+                {
+                    _logger.LogInformation(
+                        "Job started. QueueLength={QueueLength}",
+                        _queueLength);
+
+                    await job(stoppingToken);
+
+                    sw.Stop();
+
+                    _logger.LogInformation(
+                        "Job finished successfully in {ElapsedMs} ms",
+                        sw.ElapsedMilliseconds);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("Job cancelled");
+                }
+                catch (Exception ex)
+                {
+                    sw.Stop();
+
+                    _logger.LogError(
+                        ex,
+                        "Job failed after {ElapsedMs} ms",
+                        sw.ElapsedMilliseconds);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _queueLength);
+
+                    _semaphore.Release();
+
+                    _logger.LogInformation(
+                        "Job released. QueueLength={QueueLength}",
+                        _queueLength);
+                }
+            }, stoppingToken);
 
             _activeJobs.TryAdd(task, 0);
 
@@ -57,8 +100,6 @@ public class DownloadQueueService : BackgroundService
                 _activeJobs.TryRemove(t, out _);
             }, TaskScheduler.Default);
         }
-
-        _logger.LogInformation("Download queue stopped");
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

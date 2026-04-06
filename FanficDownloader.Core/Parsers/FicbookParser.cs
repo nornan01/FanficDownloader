@@ -356,6 +356,13 @@ public class FicbookParser
                         sb.Append($"<p>{System.Net.WebUtility.HtmlEncode(clean)}</p>\n");
                 }
             }
+            else if (node.Name == "a")
+            {
+                var url = node.InnerText.Trim();
+
+                if (!string.IsNullOrWhiteSpace(url))
+                    sb.Append($"<p>{System.Net.WebUtility.HtmlEncode(url)}</p>\n");
+            }
             else
             {
                 var cleaned = CleanNode(node).Trim();

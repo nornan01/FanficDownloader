@@ -195,7 +195,7 @@ Example configuration:
 ```json
 {
   "Download": {
-    "MaxConcurrentDownloads": 3
+    "MaxConcurrentDownloads": 2
   },
   "FlareSolverr": {
     "Url": "http://localhost:8191"

@@ -21,7 +21,7 @@ public class SnapetalesSource : IFanficSource
     public bool CanHandle(string url)
         => url.Contains("snapetales.com");
 
-    public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
+    public async Task<Fanfic> GetFanficAsync(string url, string sessionId, CancellationToken ct)
     {
         _logger.LogInformation("Fetching fanfic info from snapetales.com for {Url}", url);
         var html = await _http.GetStringAsync(url, ct);
@@ -36,7 +36,7 @@ public class SnapetalesSource : IFanficSource
         _logger.LogInformation("Parsed fanfic info for {Url}. Chapters: {ChapterCount}", url, fanfic.Chapters.Count);
         return fanfic;
     }
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
+    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId, CancellationToken ct)
     {
         _logger.LogInformation("Populating chapters for {Url}. Total chapters: {TotalChapters}",
             fanfic.SourceUrl, fanfic.Chapters.Count);
@@ -71,5 +71,9 @@ public class SnapetalesSource : IFanficSource
             fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
         return result;
     }
-
+    public Task DestroySessionAsync(string sessionId)
+    {
+        // No session management needed for Snapetales
+        return Task.CompletedTask;
+    }
 }

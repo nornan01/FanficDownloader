@@ -34,11 +34,10 @@ public class FicbookSource : IFanficSource
     public bool CanHandle(string url)
         => url.Contains("ficbook.net");
 
-    public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
+    public async Task<Fanfic> GetFanficAsync(string url, string sessionId, CancellationToken ct)
     {
-        var sessionId = Guid.NewGuid().ToString();
-        await _flareSolverr.EnsureSessionAsync(sessionId, ct);
-        _logger.LogInformation("Fetching fanfic info from ficbook.net for {Url}", url);
+        await _flareSolverr.EnsureSessionAsync(sessionId, ct); 
+        _logger.LogInformation("SESSION START {SessionId} for {Url}", sessionId, url);
         var request = new HttpRequestMessage(HttpMethod.Get, url);
 
         request.Headers.Accept.ParseAdd(
@@ -54,29 +53,35 @@ public class FicbookSource : IFanficSource
         var html = await response.Content.ReadAsStringAsync(ct);
         var fanfic = _parser.Parse(html);
         fanfic.SourceUrl = url;
-        fanfic.SessionId = sessionId;
-
+        
         if (fanfic.Chapters.Count == 1 && string.IsNullOrEmpty(fanfic.Chapters[0].Url))
         {
             fanfic.Chapters[0].Url = url + "?adult=true";
             _logger.LogDebug("Single-chapter fanfic without chapter URL. Using adult URL for {Url}", url);
         }
-
-        _logger.LogInformation("Parsed fanfic info for {Url}. Chapters: {ChapterCount}", url, fanfic.Chapters.Count);
+        _logger.LogInformation(
+            "SESSION {SessionId} parsed fanfic {Url} with {Chapters} chapters",
+            sessionId,
+            url,
+            fanfic.Chapters.Count
+        );
         return fanfic;
         
     }
 
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
+    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId, CancellationToken ct)
     {
-        _logger.LogInformation("Populating chapters for {Url}. Total chapters: {TotalChapters}",
-            fanfic.SourceUrl, fanfic.Chapters.Count);
+        _logger.LogInformation(
+                                "SESSION {SessionId} populating chapters for {Url}",
+                                sessionId,
+                                fanfic.SourceUrl
+                                );
         var result = new DownloadResult
         {
             Fanfic = fanfic,
             TotalChapters = fanfic.Chapters.Count
         };
-        try{
+        
         foreach (var chapter in fanfic.Chapters)
         {
             if (!string.IsNullOrEmpty(chapter.Text))
@@ -84,11 +89,15 @@ public class FicbookSource : IFanficSource
             for (int attempt = 1; attempt <= 2; attempt++)
             {
                 try
-            {   
-                _logger.LogDebug("Fetching chapter {ChapterNumber} from {ChapterUrl}",
-                    chapter.Number, chapter.Url);
-                var request = new HttpRequestMessage(HttpMethod.Get, chapter.Url);
-                var response = await SendWithFallbackAsync(request, fanfic.SessionId, ct);
+            {
+                    _logger.LogInformation(
+                    "SESSION {SessionId} → CHAPTER {ChapterNumber} → {ChapterUrl}",
+                    sessionId,
+                    chapter.Number,
+                    chapter.Url
+                );
+                    var request = new HttpRequestMessage(HttpMethod.Get, chapter.Url);
+                var response = await SendWithFallbackAsync(request, sessionId, ct);
                 var html = await response.Content.ReadAsStringAsync(ct);
                 chapter.Text = _parser.ParseChapterText(html);
                 chapter.EndNotes = _parser.ParseChapterEndNotes(html);
@@ -119,34 +128,25 @@ public class FicbookSource : IFanficSource
             }
             
             }
+            _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
+                        fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
+            return result;
         
-        return result;
-        }
-        finally
-        {
         
-                if (!string.IsNullOrEmpty(fanfic.SessionId))
-                {
-                    await _flareSolverr.DestroySessionAsync(fanfic.SessionId, ct);
-                    _logger.LogInformation("Destroyed FlareSolverr session for {Url}", fanfic.SourceUrl);
-                }
-
-                _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
-                    fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
+                
             
-        }
+        
     }
 
-    private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, string? sessionId, CancellationToken ct)
+    private async Task<HttpResponseMessage> SendWithFallbackAsync(HttpRequestMessage request, string sessionId, CancellationToken ct)
     {
         
         _logger.LogInformation("=== SendWithFallback START === Url={Url}", request.RequestUri);
 
-        var actualSessionId = sessionId ?? Guid.NewGuid().ToString();
 
-        _logger.LogInformation("Using FlareSolverr. Session={SessionId}, Url={Url}", actualSessionId, request.RequestUri);
+        _logger.LogInformation("Using FlareSolverr. Session={SessionId}, Url={Url}", sessionId, request.RequestUri);
 
-        var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), actualSessionId, ct);
+        var html = await _flareSolverr.GetAsync(request.RequestUri!.ToString(), sessionId, ct);
 
         if (string.IsNullOrWhiteSpace(html)){
             _logger.LogError("FlareSolverr returned EMPTY HTML for {Url}", request.RequestUri);
@@ -158,5 +158,9 @@ public class FicbookSource : IFanficSource
         {
             Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html")
         };
+    }
+    public Task DestroySessionAsync(string sessionId)
+    {
+        return _flareSolverr.DestroySessionAsync(sessionId, CancellationToken.None);
     }
 }

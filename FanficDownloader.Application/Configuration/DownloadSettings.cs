@@ -2,5 +2,5 @@ namespace FanficDownloader.Application.Configuration;
 
 public class DownloadSettings
 {
-    public int MaxConcurrentDownloads { get; set; } = 3;
+    public int MaxConcurrentDownloads { get; set; } = 2;
 }

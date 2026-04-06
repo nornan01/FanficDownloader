@@ -21,6 +21,8 @@ public class FanficDownloadService
     private readonly FanficCacheService _cache;
     private readonly R2StorageService _storage;
     private readonly ProxyHttpClientFactory _proxyFactory;
+    private static readonly SemaphoreSlim _infoSemaphore = new(3);
+
     public FanficDownloadService(
         SourceManager sourceManager,
         FanficEpubFormatter epubFormatter,
@@ -41,6 +43,9 @@ public class FanficDownloadService
     // 1. Получить только информацию (БЕЗ глав)
     public async Task<Fanfic> GetInfoAsync(string url, CancellationToken ct)
     {
+        await _infoSemaphore.WaitAsync();
+        try
+        {
         _logger.LogInformation("Starting info fetch for {Url}", url);
         if (url.Contains("fanfiction.net"))
         {
@@ -68,21 +73,32 @@ public class FanficDownloadService
         }
         UrlValidator.Validate(url);
         var source = _sourceManager.GetSource(url);
-        var fanfic = await source.GetFanficAsync(url, ct);
+        var sessionId = Guid.NewGuid().ToString();
+        try{
+        var fanfic = await source.GetFanficAsync(url, sessionId, ct);
         _logger.LogInformation("Completed info fetch for {Url}, Title={Title}, Chapters={Chapters}", url, fanfic.Title, fanfic.Chapters?.Count ?? 0);
         return fanfic;
+        }
+        finally{
+            await source.DestroySessionAsync(sessionId);
+        }
+        }
+        finally
+        {
+            _infoSemaphore.Release();
+        }
     }
 
     // 2. Догрузить главы
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
-    {
-        _logger.LogInformation("Starting chapter population for {Url}", fanfic.SourceUrl);
-        var source = _sourceManager.GetSource(fanfic.SourceUrl);
-        var result = await source.PopulateChaptersAsync(fanfic, ct);
-        _logger.LogInformation("Chapter population completed. ChaptersLoaded={Count}", fanfic.Chapters?.Count ?? 0);
-        return result;
+    // public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId,CancellationToken ct)
+    // {
+    //     _logger.LogInformation("Starting chapter population for {Url}", fanfic.SourceUrl);
+    //     var source = _sourceManager.GetSource(fanfic.SourceUrl);
+    //     var result = await source.PopulateChaptersAsync(fanfic, sessionId, ct);
+    //     _logger.LogInformation("Chapter population completed. ChaptersLoaded={Count}", fanfic.Chapters?.Count ?? 0);
+    //     return result;
 
-    }
+    // }
 
     private async Task DownloadImagesAsync(
     Fanfic fanfic,
@@ -130,9 +146,10 @@ public class FanficDownloadService
         try
         {
             var source = _sourceManager.GetSource(url);
-
-            var fanfic = await source.GetFanficAsync(url, ct);
-            await source.PopulateChaptersAsync(fanfic, ct);
+            var sessionId = Guid.NewGuid().ToString();
+            try{
+            var fanfic = await source.GetFanficAsync(url, sessionId, ct);
+            await source.PopulateChaptersAsync(fanfic, sessionId, ct);
             await DownloadImagesAsync(fanfic, tempFiles, ct);
 
             sw.Stop();
@@ -147,6 +164,10 @@ public class FanficDownloadService
             );
 
             return (fanfic, tempFiles);
+            }
+            finally{
+                await source.DestroySessionAsync(sessionId);
+            }
         }
         catch
         {

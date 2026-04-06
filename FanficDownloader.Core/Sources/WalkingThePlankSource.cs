@@ -23,7 +23,7 @@ public class WalkingThePlankSource : IFanficSource
     public bool CanHandle(string url)
         => url.Contains("walkingtheplank.org");
 
-    public async Task<Fanfic> GetFanficAsync(string url, CancellationToken ct)
+    public async Task<Fanfic> GetFanficAsync(string url, string sessionId, CancellationToken ct)
     {
         var printable = MakePrintableAllUrl(url);
 
@@ -38,7 +38,7 @@ public class WalkingThePlankSource : IFanficSource
         return fanfic;
     }
 
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, CancellationToken ct)
+    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId, CancellationToken ct)
     {
         _logger.LogInformation("Populating chapters for {Url}. Total chapters: {TotalChapters}",
             fanfic.SourceUrl, fanfic.Chapters.Count);
@@ -106,6 +106,10 @@ public class WalkingThePlankSource : IFanficSource
 
         return html;
     }
-
+    public Task DestroySessionAsync(string sessionId)
+    {
+        // No session management needed for Snapetales
+        return Task.CompletedTask;
+    }
 
 }
