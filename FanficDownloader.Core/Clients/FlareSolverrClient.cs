@@ -18,10 +18,8 @@ public class FlareSolverrClient
 
     public async Task<string> GetAsync(string url, string sessionId, CancellationToken ct)
     {
-        for(int attempt = 1; attempt <= 3; attempt++){
-            
+        
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await EnsureSessionAsync(sessionId, ct);
         _logger.LogInformation("FlareSolverr request started for {Url}", url);
         var payload = new
         {
@@ -100,8 +98,6 @@ public class FlareSolverrClient
             return "";
         }
             
-        }
-        return "";
     }
     public async Task EnsureSessionAsync(string sessionId, CancellationToken ct)
     {
@@ -120,5 +116,31 @@ public class FlareSolverrClient
         );
 
         _logger.LogInformation("FlareSolverr session ensured: {Session}", sessionId);
+    }
+
+    public async Task DestroySessionAsync(string sessionId, CancellationToken ct)
+    {
+        var payload = new
+        {
+            cmd = "sessions.destroy",
+            session = sessionId
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+
+        try
+        {
+            await _http.PostAsync(
+                "/v1",
+                new StringContent(json, Encoding.UTF8, "application/json"),
+                ct
+            );
+
+            _logger.LogInformation("FlareSolverr session destroyed: {Session}", sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to destroy FlareSolverr session {Session}", sessionId);
+        }
     }
 }

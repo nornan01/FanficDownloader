@@ -32,6 +32,7 @@ public class FanfictionNetSource : IFanficSource
 
         _logger.LogInformation("Fetching fanfic info from fanfiction.net for {Url}", url);
         var sessionId = Guid.NewGuid().ToString();
+        await _flare.EnsureSessionAsync(sessionId, ct);
         var html = await _flare.GetAsync(url, sessionId, ct);
         var fanfic = _parser.Parse(html, url);
         fanfic.SourceUrl = url;
@@ -48,7 +49,7 @@ public class FanfictionNetSource : IFanficSource
             Fanfic = fanfic,
             TotalChapters = fanfic.Chapters.Count
         };
-
+            try{
         foreach (var chapter in fanfic.Chapters)
         {
             try
@@ -69,10 +70,21 @@ public class FanfictionNetSource : IFanficSource
                     chapter.Number, chapter.Url);
                 result.FailedChapters.Add(chapter.Number);
             }
+            
         }
-        _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
-            fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
         return result;
+            }
+        finally
+        {
+            if (!string.IsNullOrEmpty(fanfic.SessionId))
+            {
+                await _flare.DestroySessionAsync(fanfic.SessionId, ct);
+                _logger.LogInformation("Destroyed FlareSolverr session for {Url}", fanfic.SourceUrl);
+            }
+
+            _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
+                fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
+        }
     }
 
 
