@@ -89,17 +89,6 @@ public class FanficDownloadService
         }
     }
 
-    // 2. Догрузить главы
-    // public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId,CancellationToken ct)
-    // {
-    //     _logger.LogInformation("Starting chapter population for {Url}", fanfic.SourceUrl);
-    //     var source = _sourceManager.GetSource(fanfic.SourceUrl);
-    //     var result = await source.PopulateChaptersAsync(fanfic, sessionId, ct);
-    //     _logger.LogInformation("Chapter population completed. ChaptersLoaded={Count}", fanfic.Chapters?.Count ?? 0);
-    //     return result;
-
-    // }
-
     private async Task DownloadImagesAsync(
     Fanfic fanfic,
     List<string> tempFiles,
@@ -131,13 +120,14 @@ public class FanficDownloadService
     }
 
 
-    public async Task<(Fanfic fanfic, List<string> tempFiles)> DownloadFullAsync(string url, CancellationToken ct)
+    public async Task<(Fanfic fanfic, List<string> tempFiles)> DownloadFullAsync(string url, DownloadProgress progress, CancellationToken ct)
     {
         var downloadId = Guid.NewGuid().ToString();
 
         _logger.LogInformation(
             "Download started. DownloadId={DownloadId}, Url={Url}",
             downloadId, url);
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _logger.LogInformation("Starting full download for {Url}", url);
         UrlValidator.Validate(url);
@@ -149,7 +139,7 @@ public class FanficDownloadService
             var sessionId = Guid.NewGuid().ToString();
             try{
             var fanfic = await source.GetFanficAsync(url, sessionId, ct);
-            await source.PopulateChaptersAsync(fanfic, sessionId, ct);
+            await source.PopulateChaptersAsync(fanfic, sessionId, progress, ct);
             await DownloadImagesAsync(fanfic, tempFiles, ct);
 
             sw.Stop();
@@ -180,7 +170,7 @@ public class FanficDownloadService
         }
     }
 
-    public async Task<DownloadFileResult> BuildTxtAsync(string url, CancellationToken ct)
+    public async Task<DownloadFileResult> BuildTxtAsync(string url, DownloadProgress progress, CancellationToken ct)
     {
         var cached = await _cache.GetAsync(url, FanficFormats.Txt);
 
@@ -206,7 +196,7 @@ public class FanficDownloadService
             downloadId,
             url
         );
-        var (fanfic, tempFiles) = await DownloadFullAsync(url, ct);
+        var (fanfic, tempFiles) = await DownloadFullAsync(url, progress, ct);
 
         try
         {
@@ -253,7 +243,7 @@ public class FanficDownloadService
         }
     }
 
-    public async Task<DownloadFileResult> BuildEpubAsync(string url, CancellationToken ct)
+    public async Task<DownloadFileResult> BuildEpubAsync(string url, DownloadProgress progress, CancellationToken ct)
     {
         var cached = await _cache.GetAsync(url, FanficFormats.Epub);
 
@@ -307,7 +297,7 @@ public class FanficDownloadService
             }
         }
 
-        var (fanfic, tempFiles) = await DownloadFullAsync(url, ct);
+        var (fanfic, tempFiles) = await DownloadFullAsync(url, progress, ct);
 
         string? path = null;
 
@@ -414,5 +404,4 @@ public class FanficDownloadService
         }
         return null;
     }
-
 }

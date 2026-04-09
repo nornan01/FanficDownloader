@@ -20,6 +20,7 @@ public static class DependencyInjection
     {
         // Queue + background services
         services.AddSingleton<DownloadQueueService>();
+        services.AddSingleton<WebDownloadJobStore>();
         services.AddHostedService(sp => sp.GetRequiredService<DownloadQueueService>());
         services.AddHostedService<TelegramBotBackgroundService>();
 

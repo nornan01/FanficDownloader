@@ -1,12 +1,10 @@
 using FanficDownloader.Application.Services;
+using FanficDownloader.Core.Models;
 using FanficDownloader.Web.Dtos;
 using Microsoft.AspNetCore.Mvc;
-using FanficDownloader.Core.Models;
-using FanficDownloader.Application.Models;
 using FanficDownloader.Web.Services;
-using System.Runtime.Versioning;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
+using FanficDownloader.Web.Models;
 
 
 namespace FanficDownloader.Web.Controllers;
@@ -17,115 +15,83 @@ public class DownloadController : ControllerBase
 {
     private readonly DownloadQueueService _queue;
     private readonly FanficDownloadService _downloadService;
+    private readonly WebDownloadJobStore _jobStore;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DownloadController> _logger;
 
-    public DownloadController(DownloadQueueService queue, FanficDownloadService downloadService, ILogger<DownloadController> logger)
+    public DownloadController(
+        DownloadQueueService queue,
+        FanficDownloadService downloadService,
+        WebDownloadJobStore jobStore,
+        IServiceScopeFactory scopeFactory,
+        ILogger<DownloadController> logger)
     {
         _queue = queue;
         _downloadService = downloadService;
+        _jobStore = jobStore;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
-    [HttpPost("txt")]
-    public async Task<IActionResult> DownloadTxt([FromForm] DownloadRequest request,
-                                             CancellationToken ct)
+    [HttpPost("start/{format}")]
+    public async Task<IActionResult> StartDownload(string format, [FromForm] DownloadRequest request, CancellationToken ct)
     {
-        var job = new DownloadJob
+        if (!string.Equals(format, "txt", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(format, "epub", StringComparison.OrdinalIgnoreCase))
         {
-            Url = request.Url,
-            Format = "txt",
-            RequesterId = HttpContext.TraceIdentifier
-        };
+            return BadRequest("Unsupported format");
+        }
 
-        _logger.LogInformation("WEB JOB created: {JobId} | {Url}", job.Id, job.Url);
-        var tcs = new TaskCompletionSource<DownloadFileResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var position = _queue.GetQueueLength() + 1;
-        Response.Headers["X-Queue-Position"] = position.ToString();
+        var jobId = Guid.NewGuid();
+        var url = request.Url;
+        var normalizedFormat = format.ToLowerInvariant();
 
-        await _queue.EnqueueWithPosition(async (queueCt) =>
+        _jobStore.Create(jobId, url, normalizedFormat, HttpContext.TraceIdentifier, 0);
+
+        int position;
+
+        try
+        {
+            position = await _queue.EnqueueWithPosition(async queueCt =>
+            {
+                _jobStore.MarkRunning(jobId);
+
+                try
                 {
-                    try
-                    {
-                        using var scope = HttpContext.RequestServices.CreateScope();
-                        var downloadService = scope.ServiceProvider
-                                                    .GetRequiredService<FanficDownloadService>();
+                    using var scope = _scopeFactory.CreateScope();
+                    var downloadService = scope.ServiceProvider.GetRequiredService<FanficDownloadService>();
+                    var job = _jobStore.TryGet(jobId, out var createdJob) ? createdJob : null;
+                    var progress = job?.Progress ?? new DownloadProgress();
 
-                        var file = await downloadService.BuildTxtAsync(job.Url, queueCt);
-                        job.Result = file.Bytes;
-                        tcs.SetResult(file);
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.SetException(ex);
-                    }
-                });
-        var result = await tcs.Task;
+                    var file = normalizedFormat == "epub"
+                        ? await downloadService.BuildEpubAsync(url, progress, queueCt)
+                        : await downloadService.BuildTxtAsync(url, progress, queueCt);
 
-        if (job.RequesterId != HttpContext.TraceIdentifier)
+                    _jobStore.MarkCompleted(jobId, file);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "WEB job failed: {JobId} | {Url}", jobId, url);
+                    _jobStore.MarkFailed(jobId, ex);
+                }
+            });
+        }
+        catch (Exception ex)
         {
-            _logger.LogError("CRITICAL: WEB TXT job mismatch! JobId={JobId}", job.Id);
-            return StatusCode(500, "Job mismatch");
+            _logger.LogError(ex, "Failed to enqueue WEB job: {JobId} | {Url}", jobId, url);
+            _jobStore.MarkFailed(jobId, ex);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Download queue is unavailable");
         }
 
-        if (job.Result == null)
+        _jobStore.UpdateQueuePosition(jobId, position);
+
+        _logger.LogInformation("WEB JOB created: {JobId} | {Url} | {Format}", jobId, url, normalizedFormat);
+
+        return Accepted(new
         {
-            _logger.LogError("CRITICAL: WEB TXT job result null! JobId={JobId}", job.Id);
-            return StatusCode(500, "Job failed");
-        }
-
-        return File(job.Result, result.ContentType, result.FileName);
-    }
-
-
-    [HttpPost("epub")]
-    public async Task<IActionResult> DownloadEpub([FromForm] DownloadRequest request,
-                                              CancellationToken ct)
-    {
-        var job = new DownloadJob
-        {
-            Url = request.Url,
-            Format = "epub",
-            RequesterId = HttpContext.TraceIdentifier
-        };
-        _logger.LogInformation("WEB JOB created: {JobId} | {Url}", job.Id, job.Url);
-
-        var tcs = new TaskCompletionSource<DownloadFileResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        var position = _queue.GetQueueLength() + 1;
-        Response.Headers["X-Queue-Position"] = position.ToString();
-
-        await _queue.EnqueueWithPosition(async (queueCt) =>
-                    {
-                        try
-                        {
-                            using var scope = HttpContext.RequestServices.CreateScope();
-                            var downloadService = scope.ServiceProvider
-                                                    .GetRequiredService<FanficDownloadService>();
-
-                            var file = await downloadService.BuildEpubAsync(job.Url, queueCt);
-
-                            job.Result = file.Bytes;
-
-                            tcs.SetResult(file);
-                        }
-                        catch (Exception ex)
-                        {
-                            tcs.SetException(ex);
-                        }
-                    });
-        var result = await tcs.Task;
-        if (job.RequesterId != HttpContext.TraceIdentifier)
-        {
-            _logger.LogError("CRITICAL: WEB job mismatch! JobId={JobId}", job.Id);
-            return StatusCode(500, "Job mismatch");
-        }
-
-        if (job.Result == null)
-        {
-            _logger.LogError("CRITICAL: WEB job result null! JobId={JobId}", job.Id);
-            return StatusCode(500, "Job failed");
-        }
-        return File(job.Result, result.ContentType, result.FileName);
+            jobId,
+            queuePosition = position
+        });
     }
 
 
@@ -143,8 +109,45 @@ public class DownloadController : ControllerBase
             return BadRequest("Source not supported");
         }
     }
+    [HttpGet("progress/{jobId}")]
+    public IActionResult GetProgress(Guid jobId)
+    {
+        if (!_jobStore.TryGet(jobId, out var job) || job == null)
+            return NotFound();
 
+        var total = job.Progress.TotalChapters;
+        var completed = job.Progress.CompletedChapters;
+        var percent = total > 0
+            ? (int)Math.Floor((double)completed / total * 100)
+            : job.Status == WebDownloadJobStatus.Completed
+                ? 100
+                : 0;
 
-    
+        return Ok(new
+        {
+            status = job.Status.ToString().ToLowerInvariant(),
+            totalChapters = total,
+            completedChapters = completed,
+            percent = Math.Clamp(percent, 0, 100),
+            queuePosition = job.QueuePosition,
+            error = job.Error
+        });
+    }
+
+    [HttpGet("file/{jobId}")]
+    public IActionResult DownloadFile(Guid jobId)
+    {
+        if (!_jobStore.TryGet(jobId, out var job) || job == null)
+            return NotFound();
+
+        if (job.Status == WebDownloadJobStatus.Failed)
+            return BadRequest(job.Error ?? "Download failed");
+
+        if (job.Status != WebDownloadJobStatus.Completed || job.Result == null)
+            return Conflict("File is not ready yet");
+
+        return File(job.Result.Bytes, job.Result.ContentType, job.Result.FileName);
+    }
+
 
 }

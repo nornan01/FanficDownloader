@@ -38,16 +38,14 @@ public class WalkingThePlankSource : IFanficSource
         return fanfic;
     }
 
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId, CancellationToken ct)
+    public async Task PopulateChaptersAsync(Fanfic fanfic, string sessionId, DownloadProgress progress, CancellationToken ct)
     {
         _logger.LogInformation("Populating chapters for {Url}. Total chapters: {TotalChapters}",
             fanfic.SourceUrl, fanfic.Chapters.Count);
-        var result = new DownloadResult
-        {
-            Fanfic = fanfic,
-            TotalChapters = fanfic.Chapters.Count
-        };
-
+        progress.TotalChapters = fanfic.Chapters.Count;
+        progress.CompletedChapters = 0;
+        var loadedChapters = 0;
+        var failedChapters = new List<int>();
         try
         {
             var html = await _http.GetStringAsync(fanfic.SourceUrl, ct);
@@ -57,20 +55,20 @@ public class WalkingThePlankSource : IFanficSource
             for (int i = 0; i < fanfic.Chapters.Count && i < chapterTexts.Count; i++)
             {
                 fanfic.Chapters[i].Text = SanitizeForXhtml(chapterTexts[i]);
-                result.LoadedChapters++;
+                loadedChapters++;
+                progress.CompletedChapters = loadedChapters;
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to load chapters for {Url}", fanfic.SourceUrl);
-            result.FailedChapters.AddRange(
+            failedChapters.AddRange(
                 fanfic.Chapters.Select(c => c.Number)
             );
         }
 
         _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
-            fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
-        return result;
+            fanfic.SourceUrl, loadedChapters, failedChapters.Count);
     }
 
 
