@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices.Marshalling;
 using FanficDownloader.Core.Utils;
 using Npgsql;
+using FanficDownloader.Core.Models;
 
 namespace FanficDownloader.Bot.Services;
 
@@ -26,6 +27,7 @@ public class FanficService
         ITelegramBotClient bot,
         long chatId,
         string url,
+        DownloadProgress progress,
         CancellationToken ct)
     {
         _logger.LogInformation(
@@ -33,7 +35,7 @@ public class FanficService
             chatId, url);
 
         try{
-        var file = await _downloadService.BuildTxtAsync(url, ct);
+        var file = await _downloadService.BuildTxtAsync(url, progress, ct);
 
         using var stream = new MemoryStream(file.Bytes);
 
@@ -76,6 +78,7 @@ public class FanficService
         ITelegramBotClient bot,
         long chatId,
         string url,
+        DownloadProgress progress,
         CancellationToken ct)
     {
         _logger.LogInformation(
@@ -95,7 +98,7 @@ public class FanficService
                 chatId,
                 url
             );
-            var file = await _downloadService.BuildEpubAsync(job.Url, ct);
+            var file = await _downloadService.BuildEpubAsync(job.Url, progress, ct);
 
             job.Result = file.Bytes;
             if (job.RequesterId != chatId.ToString())

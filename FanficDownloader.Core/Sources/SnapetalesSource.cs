@@ -2,6 +2,7 @@ using FanficDownloader.Core.Models;
 using FanficDownloader.Core.Parsers;
 using Microsoft.Extensions.Logging;
 
+
 namespace FanficDownloader.Core.Sources;
 
 
@@ -36,16 +37,14 @@ public class SnapetalesSource : IFanficSource
         _logger.LogInformation("Parsed fanfic info for {Url}. Chapters: {ChapterCount}", url, fanfic.Chapters.Count);
         return fanfic;
     }
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId, CancellationToken ct)
+    public async Task PopulateChaptersAsync(Fanfic fanfic, string sessionId, DownloadProgress progress, CancellationToken ct)
     {
         _logger.LogInformation("Populating chapters for {Url}. Total chapters: {TotalChapters}",
             fanfic.SourceUrl, fanfic.Chapters.Count);
-        var result = new DownloadResult
-        {
-            Fanfic = fanfic,
-            TotalChapters = fanfic.Chapters.Count
-        };
-
+        progress.TotalChapters = fanfic.Chapters.Count;
+        progress.CompletedChapters = 0;
+        var loadedChapters = 0;
+        var failedChapters = new List<int>();
         foreach (var chapter in fanfic.Chapters)
         {
             try
@@ -57,19 +56,19 @@ public class SnapetalesSource : IFanficSource
                     chapter.Number, chapter.Url);
                 var html = await _http.GetStringAsync(chapter.Url, ct);
                 chapter.Text = _parser.ParseChapterText(html);
-                result.LoadedChapters++;
+                loadedChapters++;
+                progress.CompletedChapters = loadedChapters;
                 await Task.Delay(Random.Shared.Next(1200, 2500), ct);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to load chapter {ChapterNumber} from {ChapterUrl}",
                     chapter.Number, chapter.Url);
-                result.FailedChapters.Add(chapter.Number);
+                failedChapters.Add(chapter.Number);
             }
         }
         _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
-            fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
-        return result;
+            fanfic.SourceUrl, loadedChapters, failedChapters.Count);
     }
     public Task DestroySessionAsync(string sessionId)
     {

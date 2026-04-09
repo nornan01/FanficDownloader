@@ -69,18 +69,17 @@ public class FicbookSource : IFanficSource
         
     }
 
-    public async Task<DownloadResult> PopulateChaptersAsync(Fanfic fanfic, string sessionId, CancellationToken ct)
+    public async Task PopulateChaptersAsync(Fanfic fanfic, string sessionId, DownloadProgress progress, CancellationToken ct)
     {
         _logger.LogInformation(
                                 "SESSION {SessionId} populating chapters for {Url}",
                                 sessionId,
                                 fanfic.SourceUrl
                                 );
-        var result = new DownloadResult
-        {
-            Fanfic = fanfic,
-            TotalChapters = fanfic.Chapters.Count
-        };
+        progress.TotalChapters = fanfic.Chapters.Count;
+        progress.CompletedChapters = 0;
+        var loadedChapters = 0;
+        var failedChapters = new List<int>();
         
         foreach (var chapter in fanfic.Chapters)
         {
@@ -96,13 +95,15 @@ public class FicbookSource : IFanficSource
                     chapter.Number,
                     chapter.Url
                 );
-                    var request = new HttpRequestMessage(HttpMethod.Get, chapter.Url);
+                    
+                var request = new HttpRequestMessage(HttpMethod.Get, chapter.Url);
                 var response = await SendWithFallbackAsync(request, sessionId, ct);
                 var html = await response.Content.ReadAsStringAsync(ct);
                 chapter.Text = _parser.ParseChapterText(html);
                 chapter.EndNotes = _parser.ParseChapterEndNotes(html);
                 chapter.StartNotes = _parser.ParseChapterStartNotes(html);
-                result.LoadedChapters++;
+                loadedChapters++;
+                progress.CompletedChapters = loadedChapters;
                 var delay = Random.Shared.Next(1200, 2500);
                 _logger.LogInformation("Sleeping {Delay} ms before next chapter", delay);
                 await Task.Delay(delay, ct);
@@ -115,7 +116,7 @@ public class FicbookSource : IFanficSource
 
                         if (attempt == 2)
                         {
-                            result.FailedChapters.Add(chapter.Number);
+                            failedChapters.Add(chapter.Number);
                         }
                         else
                         {
@@ -129,8 +130,7 @@ public class FicbookSource : IFanficSource
             
             }
             _logger.LogInformation("Finished populating chapters for {Url}. Loaded: {Loaded}. Failed: {Failed}",
-                        fanfic.SourceUrl, result.LoadedChapters, result.FailedChapters.Count);
-            return result;
+                        fanfic.SourceUrl, loadedChapters, failedChapters.Count);
         
         
                 

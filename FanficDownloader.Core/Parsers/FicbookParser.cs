@@ -295,8 +295,8 @@ public class FicbookParser
     {
         var node = doc.DocumentNode
             .SelectSingleNode("//div[@class='mb-10'][.//strong[text()='Примечания:']]//div");
-
-        return node?.InnerHtml?.Trim();
+        var text = HtmlEntity.DeEntitize(node?.InnerText ?? "");
+        return text.Trim();
     }
     private string? ParseDedication(HtmlDocument doc)
     {

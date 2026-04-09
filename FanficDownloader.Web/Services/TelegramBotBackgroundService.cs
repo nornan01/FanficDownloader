@@ -5,6 +5,7 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using Telegram.Bot.Exceptions;
 using FanficDownloader.Application.Services;
 using FanficDownloader.Core.Models;
 using FanficDownloader.Core.Formatting;
@@ -118,7 +119,9 @@ public class TelegramBotBackgroundService : BackgroundService
                 return;
             }
 
-            await botClient.SendMessage(
+            var messageUrl = pendingFanfic.SourceUrl;
+            var progress = new DownloadProgress();
+            var statusMessage = await botClient.SendMessage(
                 chatId,
                 T(chatId,
                     "⏳ Preparing the file, it might take a few minutes...",
@@ -126,25 +129,69 @@ public class TelegramBotBackgroundService : BackgroundService
                 cancellationToken: cancellationToken
             );
 
-            var messageUrl = pendingFanfic.SourceUrl;
-
             var position = await _queue.EnqueueWithPosition(async (ct) =>
             {
                 using var scope = _scopeFactory.CreateScope();
                 var fanficService = scope.ServiceProvider.GetRequiredService<FanficService>();
+                using var progressCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var progressTask = ReportProgressAsync(
+                    botClient,
+                    chatId,
+                    statusMessage.MessageId,
+                    progress,
+                    progressCts.Token);
 
-                if (data == "format:txt")
-                    await fanficService.SendFanficAsTxtAsync(botClient, chatId, messageUrl, ct);
+                try
+                {
+                    if (data == "format:txt")
+                        await fanficService.SendFanficAsTxtAsync(botClient, chatId, messageUrl, progress, ct);
 
-                if (data == "format:epub")
-                    await fanficService.SendFanficAsEpubAsync(botClient, chatId, messageUrl, ct);
+                    if (data == "format:epub")
+                        await fanficService.SendFanficAsEpubAsync(botClient, chatId, messageUrl, progress, ct);
+
+                    await UpdateProgressMessageAsync(
+                        botClient,
+                        chatId,
+                        statusMessage.MessageId,
+                        T(chatId,
+                            "⏳ Preparing the file... 100% downloaded. Sending file...",
+                            "⏳ Готовлю файл... 100% загружено. Отправляю файл..."),
+                        ct);
+                }
+                catch (Exception)
+                {
+                    await UpdateProgressMessageAsync(
+                        botClient,
+                        chatId,
+                        statusMessage.MessageId,
+                        T(chatId,
+                            "❌ Download failed. Please try again later.",
+                            "❌ Не удалось скачать файл. Попробуй позже."),
+                        ct);
+                    throw;
+                }
+                finally
+                {
+                    await progressCts.CancelAsync();
+
+                    try
+                    {
+                        await progressTask;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                }
             });
 
-            await botClient.SendMessage(
+            await UpdateProgressMessageAsync(
+                botClient,
                 chatId,
-                $"You are #{position} in queue. Preparing your file...",
-                cancellationToken: cancellationToken
-            );
+                statusMessage.MessageId,
+                T(chatId,
+                    $"⏳ You're #{position} in queue. Preparing the file...",
+                    $"⏳ Ты #{position} в очереди. Готовлю файл..."),
+                cancellationToken);
 
             _pendingFanfics.TryRemove(chatId, out _);
             return;
@@ -307,5 +354,73 @@ public class TelegramBotBackgroundService : BackgroundService
         _logger.LogInformation("Stopping Telegram bot");
         await base.StopAsync(cancellationToken);
         _logger.LogInformation("Telegram bot stopped");
+    }
+
+    private async Task ReportProgressAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        int messageId,
+        DownloadProgress progress,
+        CancellationToken cancellationToken)
+    {
+        string? lastText = null;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var text = BuildProgressText(chatId, progress);
+
+            if (!string.Equals(text, lastText, StringComparison.Ordinal))
+            {
+                await UpdateProgressMessageAsync(
+                    botClient,
+                    chatId,
+                    messageId,
+                    text,
+                    cancellationToken);
+
+                lastText = text;
+            }
+
+            await Task.Delay(1000, cancellationToken);
+        }
+    }
+
+    private string BuildProgressText(long chatId, DownloadProgress progress)
+    {
+        var total = progress.TotalChapters;
+        var completed = progress.CompletedChapters;
+
+        if (total <= 0)
+        {
+            return T(chatId,
+                "⏳ Preparing the file, it might take a few minutes...",
+                "⏳ Готовлю файл, это может занять пару минут...");
+        }
+
+        var percent = (int)Math.Clamp(Math.Floor((double)completed / total * 100), 0, 100);
+
+        return T(chatId,
+            $"⏳ Preparing the file... {percent}% downloaded ({completed}/{total} chapters)",
+            $"⏳ Готовлю файл... {percent}% загружено ({completed}/{total} глав)");
+    }
+
+    private async Task UpdateProgressMessageAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        int messageId,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await botClient.EditMessageText(
+                chatId,
+                messageId,
+                text,
+                cancellationToken: cancellationToken);
+        }
+        catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified", StringComparison.OrdinalIgnoreCase))
+        {
+        }
     }
 }
