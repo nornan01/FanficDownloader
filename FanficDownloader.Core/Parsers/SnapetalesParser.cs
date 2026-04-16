@@ -1,5 +1,6 @@
 using FanficDownloader.Core.Models;
 using HtmlAgilityPack;
+using Microsoft.VisualBasic;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -25,6 +26,34 @@ public class SnapetalesParser
         };
     }
 
+    public Fanfic ParseFullText(string html)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+        var tables = doc.DocumentNode.SelectNodes("//table");
+        if (tables == null || tables.Count < 2)
+            throw new Exception("Invalid Snapetales HTML structure");
+        var metaTable = tables[0];
+        var contentTable = tables[1];
+        var contentTd = contentTable.SelectSingleNode(".//td");
+        var normalized = NormalizeHtml(contentTd.InnerHtml);
+        
+
+        return new Fanfic
+        {
+            Title = metaTable.SelectSingleNode(".//h3")?.InnerText?.Trim() ?? "No Title",
+            Authors = SplitToList(GetValue(metaTable, "Автор")),
+            Pairings = SplitToList(GetValue(metaTable, "Пейринг")),
+            Rating = GetValue(metaTable, "Рейтинг"),
+            Fandoms = SplitToList(GetValue(metaTable, "Фандом")),
+            Tags = SplitToList(GetValue(metaTable, "Жанр:")),
+            OtherTags = SplitToList(GetValue(metaTable, "Предупреждения:")).Concat(SplitToList(GetValue(metaTable, "Каталог:"))).ToList(),
+            Description = NormalizeHtml(GetHtmlValue(metaTable, "Аннотация")).Replace("<p>", "").Replace("</p>", "\n").Trim(),
+            Notes = NormalizeHtml(GetHtmlValue(metaTable, "Комментарии")).Replace("<p>", "").Replace("</p>", "\n").Trim(),
+            Chapters = SplitIntoChapters(normalized)
+
+        };
+    }
 
     private string? ParseTitle(HtmlDocument doc)
     {
@@ -155,41 +184,7 @@ public class SnapetalesParser
 
         var blockquote = blockquotes.Last();
 
-        // берём HTML, а не текст
-        var raw = blockquote.InnerHtml
-            .Replace("\r", "")
-            .Replace("<br />", "<br>")
-            .Trim();
-
-        // <br><br> = абзац
-        var parts = raw
-            .Split(new[] { "<br><br>" }, StringSplitOptions.RemoveEmptyEntries);
-
-        var sb = new StringBuilder();
-
-        foreach (var part in parts)
-        {
-            
-            var cleaned = part.Trim();
-
-
-            if (string.IsNullOrWhiteSpace(cleaned))
-                continue;
-
-            var temp = new HtmlDocument();
-            temp.LoadHtml(cleaned);
-
-            var inner = new StringBuilder();
-            foreach (var node in temp.DocumentNode.ChildNodes)
-                inner.Append(CleanNode(node));
-
-            var result = inner.ToString().Trim();
-            if (result.Length > 0)
-                sb.Append($"<p>{result}</p>\n");
-        }
-
-
-        return sb.ToString();
+        return NormalizeHtml(blockquote.InnerHtml);
     }
 
 
@@ -236,6 +231,178 @@ public class SnapetalesParser
         var sb = new StringBuilder();
         foreach (var c in node.ChildNodes)
             sb.Append(CleanNode(c));
+        return sb.ToString();
+    }
+    
+
+    private string GetValue(HtmlNode table, string label)
+    {
+        var rows = table.SelectNodes(".//tr");
+
+        foreach (var row in rows)
+        {
+            var cells = row.SelectNodes("td");
+            if (cells == null || cells.Count < 2)
+                continue;
+
+            if (cells[0].InnerText.Contains(label))
+                return HtmlEntity.DeEntitize(cells[1].InnerText.Trim());
+        }
+
+        return "";
+    }
+    private string GetHtmlValue(HtmlNode table, string label)
+    {
+        var rows = table.SelectNodes(".//tr");
+
+        foreach (var row in rows)
+        {
+            var cells = row.SelectNodes("td");
+            if (cells == null || cells.Count < 2)
+                continue;
+
+            if (cells[0].InnerText.Contains(label))
+                return cells[1].InnerHtml; // 🔥 ВАЖНО
+        }
+
+        return "";
+    }
+    private List<Chapter> SplitIntoChapters(string html)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var chapters = new List<Chapter>();
+
+        var nodes = doc.DocumentNode.ChildNodes;
+
+        var currentContent = new StringBuilder();
+        string currentTitle = "Текст";
+        int number = 1;
+
+        foreach (var node in nodes)
+        {
+            if (node.Name == "#text")
+                continue;
+
+            // глава
+            if (node.Name == "p")
+            {
+                var strong = node.SelectSingleNode(".//strong");
+
+                if (strong != null && strong.InnerText.Contains("Глава"))
+                {
+                    if (currentContent.Length > 0)
+                    {
+                        chapters.Add(new Chapter
+                        {
+                            Number = number++,
+                            Title = currentTitle,
+                            Text = currentContent.ToString()
+                        });
+
+                        currentContent.Clear();
+                    }
+
+                    currentTitle = HtmlEntity.DeEntitize(node.InnerText.Trim());
+                    continue;
+                }
+
+                currentContent.Append(node.OuterHtml);
+            }
+            else if (node.Name == "img")
+            {
+                var src = node.GetAttributeValue("src", "");
+                if (!string.IsNullOrEmpty(src))
+                    currentContent.Append($"<img src=\"{src}\" />");
+            }
+        }
+
+        if (currentContent.Length > 0)
+        {
+            chapters.Add(new Chapter
+            {
+                Number = number++,
+                Title = currentTitle,
+                Text = currentContent.ToString()
+            });
+        }
+
+        return chapters;
+    }
+
+    private List<string> SplitToList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return new List<string>();
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .ToList();
+    }
+
+    private string NormalizeHtml(string html)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var raw = doc.DocumentNode.InnerHtml
+            .Replace("\r", "")
+            .Replace("<br />", "<br>")
+            .Replace("<br/>", "<br>")
+            .Trim();
+
+        // 🔥 нормализуем любые последовательности <br>
+        raw = Regex.Replace(raw, @"(<br>\s*){2,}", "<br><br>");
+
+        var parts = raw
+            .Split(new[] { "<br><br>" }, StringSplitOptions.RemoveEmptyEntries);
+
+        var sb = new StringBuilder();
+
+        foreach (var part in parts)
+        {
+            var cleaned = part.Trim();
+            if (string.IsNullOrWhiteSpace(cleaned))
+                continue;
+
+            var temp = new HtmlDocument();
+            temp.LoadHtml(cleaned);
+
+            var inner = new StringBuilder();
+
+            bool hasImage = false;
+            bool hasText = false;
+
+            foreach (var node in temp.DocumentNode.ChildNodes)
+            {
+                if (node.Name == "img")
+                    hasImage = true;
+
+                if (node.Name == "#text" && !string.IsNullOrWhiteSpace(node.InnerText))
+                    hasText = true;
+
+                inner.Append(CleanNode(node));
+            }
+
+            var result = inner.ToString().Trim();
+            if (string.IsNullOrWhiteSpace(result))
+                continue;
+
+            // 💥 ЛОГИКА ОБЁРТКИ
+            if (hasImage && !hasText)
+            {
+                // только картинка → НЕ оборачиваем
+                sb.Append(result + "\n");
+            }
+            else
+            {
+                // текст или текст+картинка → оборачиваем
+                sb.Append($"<p>{result}</p>\n");
+            }
+        }
+
         return sb.ToString();
     }
 

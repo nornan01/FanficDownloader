@@ -307,22 +307,22 @@ public class FanficDownloadService
 
             var bytes = await File.ReadAllBytesAsync(path, ct);
             _logger.LogInformation("EPUB build completed for {Url}", url);
-            var objectKey = _storage.BuildObjectKey(url, FanficFormats.Epub, fanfic.Title);
+            //var objectKey = _storage.BuildObjectKey(url, FanficFormats.Epub, fanfic.Title);
 
             using var uploadStream = new MemoryStream(bytes);
 
-            await _storage.UploadFileAsync(
-                objectKey,
-                uploadStream,
-                "application/epub+zip"
-            );
+            // await _storage.UploadFileAsync(
+            //     objectKey,
+            //     uploadStream,
+            //     "application/epub+zip"
+            // );
 
-            await _cache.SaveAsync(
-                url,
-                fanfic.Title,
-                objectKey,
-                FanficFormats.Epub
-            );
+            // await _cache.SaveAsync(
+            //     url,
+            //     fanfic.Title,
+            //     objectKey,
+            //     FanficFormats.Epub
+            // );
 
             return new DownloadFileResult
             {

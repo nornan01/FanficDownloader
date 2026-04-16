@@ -128,10 +128,16 @@ public class FanficTxtFormatter
         sb.AppendLine();
         sb.AppendLine("Thank you for using Fanfic Downloader 💜");
         sb.AppendLine();
-        sb.AppendLine("Join our Telegram channel for updates, new supported websites, and improvements:");
+        sb.AppendLine("Join the Telegram channel for updates, new supported websites, and improvements:");
         sb.AppendLine("https://t.me/fanficdownloaderhub");
         sb.AppendLine();
-        sb.AppendLine("Have suggestions or want to see support for another site?");
+        sb.AppendLine("Telegram bot for fast downloads:");
+        sb.AppendLine("https://t.me/fanfic_downloader_bot");
+        sb.AppendLine();
+        sb.AppendLine("Web version:");
+        sb.AppendLine("https://fanficdownloader.com/");
+        sb.AppendLine();
+        sb.AppendLine("Found a bug, have suggestions or want to see support for another site?");
         sb.AppendLine("Send us your ideas — we’re building this together.");
         sb.AppendLine();
         sb.AppendLine("Happy reading ✨");

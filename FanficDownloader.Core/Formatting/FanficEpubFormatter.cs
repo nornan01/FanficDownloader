@@ -119,12 +119,22 @@ try{
             <p>Thank you for using Fanfic Downloader 💜</p>
 
             <p>
-            Join our Telegram channel for updates, new supported websites, and improvements:<br/>
-            https://t.me/your_channel_name
+            Join the Telegram channel for updates, new supported websites, and improvements:<br/>
+            https://t.me/fanficdownloaderhub
+            </p>
+            
+            <p>
+            Telegram bot for fast downloads:<br/>
+            https://t.me/fanfic_downloader_bot
             </p>
 
             <p>
-            Have suggestions or want to see support for another site?<br/>
+            Web version:<br/>
+            https://fanficdownloader.com/
+            </p>
+
+            <p>
+            Found a bug, have suggestions or want to see support for another site?<br/>
             Send us your ideas — we’re building this together.
             </p>
 
