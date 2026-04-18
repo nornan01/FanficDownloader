@@ -53,6 +53,13 @@ public class FanficTxtFormatter
             sb.AppendLine(HtmlToPlainText(fanfic.Size));
             sb.AppendLine();
         }
+        // 🔹 Статус
+        if (fanfic.IsFinished.HasValue)
+        {
+            sb.AppendLine("Status:");
+            sb.AppendLine(fanfic.IsFinished.Value ? "Completed" : "In Progress");
+            sb.AppendLine();
+        }
 
         // 🔹 Жанры
         if (fanfic.Tags.Any())

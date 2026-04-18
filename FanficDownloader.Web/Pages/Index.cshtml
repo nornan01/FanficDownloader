@@ -149,13 +149,13 @@
                     </button>
                 </div>
             </div>
-                <div id="downloadLoading" style="display:none;" class="mt-4 text-center">
+                <div id="downloadLoading" class="mt-4 text-center hidden">
                     <span id="queueText" class="text-sm text-gray-500"></span>
                 </div>
-            <!-- Merged Content from SCREEN_13: Download Results Reveal -->
+            <!-- Download Results Reveal -->
             <div id="fanficCard" class="mt-20 w-full text-left max-w-4xl animate-in fade-in slide-in-from-bottom-8 duration-1000 hidden">
                 <!-- Finalizing Metadata Progress -->
-                <div class="mb-12">
+                <div id="downloadProgressSection" class="mb-12 hidden">
                     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-end md:justify-between">
                         <div>
                             <p class="text-sm text-on-surface-variant">Archival quality verified</p>
@@ -398,19 +398,33 @@
                 }, 500); // 500ms задержка
             });
 
+        function hideDownloadProgress() {
+            var loader = document.getElementById("downloadLoading");
+            var queueText = document.getElementById("queueText");
+            var progressSection = document.getElementById("downloadProgressSection");
+            var progressBar = document.getElementById("progressBar");
+            var progressPercent = document.getElementById("progressPercent");
+            var estimateText = document.getElementById("estimateText");
+
+            if (loader) loader.classList.add("hidden");
+            if (queueText) queueText.innerText = "";
+            if (progressSection) progressSection.classList.add("hidden");
+            if (progressBar) progressBar.style.width = "0%";
+            if (progressPercent) progressPercent.innerText = "0%";
+            if (estimateText) estimateText.innerText = "";
+        }
+
         async function loadPreview() {
             try {
                     
                     const requestId = ++lastRequestId;
                     var url = urlInput.value.trim();
-                    if (!url) return;
-                    var progress = document.getElementById("progressBar");
-                    var estimateText = document.getElementById("estimateText");
-                    var progressPercent = document.getElementById("progressPercent");
+                    if (!url) {
+                        hideDownloadProgress();
+                        return;
+                    }
 
-                                                                            if (progress) progress.style.width = "0%";
-                    if (estimateText) estimateText.innerText = "";
-                    if (progressPercent) progressPercent.innerText = "0%";
+                    hideDownloadProgress();
 
                     
                     document.getElementById("btnEpub").disabled = true;
@@ -445,7 +459,16 @@
                     document.getElementById("ficFandoms").innerText = fic.fandoms?.join(", ") ?? "";
                     document.getElementById("ficPairings").innerText = fic.pairings?.join(", ") ?? "";
                     document.getElementById("ficChapters").innerText = fic.chapters?.length ?? "0";
-                    document.getElementById("ficNotes").innerText = fic.notes ?? "";
+                    const notesEl = document.getElementById("ficNotes");
+                    const container = notesEl.closest("div");
+
+                    const notes = fic.notes ?? "";
+
+                    if (notes.trim()) {
+                        notesEl.innerText = notes;
+                    } else {
+                        container.classList.add("hidden"); // Tailwind
+                    }
 
                     var tagsRow = document.getElementById("rowTags");
                     tagsRow.innerHTML = "";
@@ -493,11 +516,13 @@
             var btnTxt = document.getElementById("btnTxt");
             var loader = document.getElementById("downloadLoading");
             var queueText = document.getElementById("queueText");
+            var progressSection = document.getElementById("downloadProgressSection");
             var progressBar = document.getElementById("progressBar");
             var progressPercent = document.getElementById("progressPercent");
             btnEpub.disabled = true;
             btnTxt.disabled = true;
-            loader.style.display = "block";
+            loader.classList.remove("hidden");
+            progressSection.classList.remove("hidden");
             activeJobId = null;
 
             if (progressBar) progressBar.style.width = "0%";
@@ -574,7 +599,7 @@
                 queueText.innerText = "Download failed. Please try again.";
             }
             finally {
-                loader.style.display = "none";
+                loader.classList.add("hidden");
                 btnEpub.disabled = false;
                 btnTxt.disabled = false;
                 activeJobId = null;
@@ -590,6 +615,7 @@
                 if (!res.ok) {
                     throw new Error("Progress polling failed");
                 }
+                
 
                 const progress = await res.json();
                 const percent = progress.percent || 0;

@@ -16,6 +16,7 @@ public class FicbookParser
         {
             Title = ParseTitle(doc),
             Authors = ParseAuthors(doc),
+            IsFinished = ParseIsFinished(doc),
             Fandoms = ParseFandoms(doc),
             Pairings = ParsePairings(doc),
             Tags = ParseTags(doc),
@@ -48,7 +49,14 @@ public class FicbookParser
             ?? new List<string>();
     }
 
-//the
+    private bool? ParseIsFinished(HtmlDocument doc)
+        {
+            if (doc.DocumentNode.SelectSingleNode("//div[contains(@class,'badge-status-in-progress')]") != null)
+            {
+                return false;
+            }
+            return true;
+        }
     private List<string> ParseFandoms(HtmlDocument doc)
     {
         var scripts = doc.DocumentNode.SelectNodes("//script");

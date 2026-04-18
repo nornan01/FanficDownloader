@@ -207,19 +207,20 @@ public class FanficDownloadService
             var objectKey = _storage.BuildObjectKey(url, FanficFormats.Txt, fanfic.Title);
 
             using var uploadStream = new MemoryStream(bytes);
+            if(fanfic.IsFinished == true){
+                    await _storage.UploadFileAsync(
+                        objectKey,
+                        uploadStream,
+                        "text/plain"
+                    );
 
-            await _storage.UploadFileAsync(
-                objectKey,
-                uploadStream,
-                "text/plain"
-            );
-
-            await _cache.SaveAsync(
-                url,
-                fanfic.Title,
-                objectKey,
-                FanficFormats.Txt
-            );
+                    await _cache.SaveAsync(
+                        url,
+                        fanfic.Title,
+                        objectKey,
+                        FanficFormats.Txt
+                    );
+            }
             _logger.LogInformation(
                 "TXT build completed. DownloadId={DownloadId}, Url={Url}, Size={Size}",
                 downloadId,
@@ -307,23 +308,24 @@ public class FanficDownloadService
 
             var bytes = await File.ReadAllBytesAsync(path, ct);
             _logger.LogInformation("EPUB build completed for {Url}", url);
-            //var objectKey = _storage.BuildObjectKey(url, FanficFormats.Epub, fanfic.Title);
+            var objectKey = _storage.BuildObjectKey(url, FanficFormats.Epub, fanfic.Title);
 
             using var uploadStream = new MemoryStream(bytes);
 
-            // await _storage.UploadFileAsync(
-            //     objectKey,
-            //     uploadStream,
-            //     "application/epub+zip"
-            // );
+            if(fanfic.IsFinished == true){
+                await _storage.UploadFileAsync(
+                    objectKey,
+                    uploadStream,
+                    "application/epub+zip"
+                );
 
-            // await _cache.SaveAsync(
-            //     url,
-            //     fanfic.Title,
-            //     objectKey,
-            //     FanficFormats.Epub
-            // );
-
+                await _cache.SaveAsync(
+                    url,
+                    fanfic.Title,
+                    objectKey,
+                    FanficFormats.Epub
+                );
+            }
             return new DownloadFileResult
             {
                 Bytes = bytes,

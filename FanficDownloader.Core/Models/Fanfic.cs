@@ -21,5 +21,7 @@ public class Fanfic
     public string? Notes { get; set; }
     public string? Dedication { get; set; }
 
+    public bool? IsFinished { get; set; } = true;
+
 
 }

@@ -92,6 +92,7 @@ try{
 
             {Line("Рейтинг", fanfic.Rating)}
             {Line("Размер", fanfic.Size)}
+            {Line("Статус", fanfic.IsFinished == true ? "Завершён" : "В процессе")}
 
             {LineList("Жанры", fanfic.Tags)}
             {LineList("Другие метки", fanfic.OtherTags)}
