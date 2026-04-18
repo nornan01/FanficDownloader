@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using FanficDownloader.Web.Services;
 using Microsoft.Extensions.Logging;
 using FanficDownloader.Web.Models;
+using Npgsql;
 
 
 namespace FanficDownloader.Web.Controllers;
@@ -18,19 +19,21 @@ public class DownloadController : ControllerBase
     private readonly WebDownloadJobStore _jobStore;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DownloadController> _logger;
+    private readonly string _connectionString;
 
     public DownloadController(
         DownloadQueueService queue,
         FanficDownloadService downloadService,
         WebDownloadJobStore jobStore,
         IServiceScopeFactory scopeFactory,
-        ILogger<DownloadController> logger)
+        ILogger<DownloadController> logger, IConfiguration configuration)
     {
         _queue = queue;
         _downloadService = downloadService;
         _jobStore = jobStore;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _connectionString = configuration.GetConnectionString("Postgres")!;
     }
 
     [HttpPost("start/{format}")]
@@ -68,6 +71,15 @@ public class DownloadController : ControllerBase
                         : await downloadService.BuildTxtAsync(url, progress, queueCt);
 
                     _jobStore.MarkCompleted(jobId, file);
+                    await using var connection = new NpgsqlConnection(_connectionString);
+                    await connection.OpenAsync();
+                    await using var cmd = new NpgsqlCommand(@"
+                                                                INSERT INTO downloads (url, source, format)
+                                                                VALUES (@url, 'web', @format)
+                                                            ", connection);
+                    cmd.Parameters.AddWithValue("url", url);
+                    cmd.Parameters.AddWithValue("format", normalizedFormat);
+                    await cmd.ExecuteNonQueryAsync();
                 }
                 catch (Exception ex)
                 {

@@ -59,12 +59,12 @@ public class FanficService
         await connection.OpenAsync();
 
         await using var cmd = new NpgsqlCommand(@"
-                                                    INSERT INTO downloads (url, source, format)
-                                                    VALUES (@url, 'bot', 'txt')
+                                                    INSERT INTO downloads (url, source, format, user_id)
+                                                    VALUES (@url, 'bot', 'txt', @userid)
                                                 ", connection);
 
             cmd.Parameters.AddWithValue("url", url);
-
+            cmd.Parameters.AddWithValue("userid", chatId);
             await cmd.ExecuteNonQueryAsync();
         }
         catch(Exception ex)
@@ -133,12 +133,12 @@ public class FanficService
             await connection.OpenAsync();
 
             await using var cmd = new NpgsqlCommand(@"
-            INSERT INTO downloads (url, source, format)
-            VALUES (@url, 'bot', 'epub')
+            INSERT INTO downloads (url, source, format, user_id)
+            VALUES (@url, 'bot', 'epub', @userid)
              ", connection);
 
             cmd.Parameters.AddWithValue("url", url);
-
+            cmd.Parameters.AddWithValue("userid", chatId);
             await cmd.ExecuteNonQueryAsync();
 
             _logger.LogInformation(
